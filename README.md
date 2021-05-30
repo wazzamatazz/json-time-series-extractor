@@ -1,44 +1,120 @@
-# C# Repository Template
+# Jaahas.Json.TimeSeriesExtractor
 
-Repository template for a C# project.
-
-
-# Getting Started
-
-- Create a new repository on GitHub and choose this repository as the template, or click on the _"Use this template"_ button on the repository home page.
-- Rename the solution file in the root of the repository ([RENAME-ME.sln](/RENAME-ME.sln)).
-- Update [Directory.Build.props](/Directory.Build.props) in the root folder and replace the placeholder values in the shared project properties (e.g. `{{COPYRIGHT_START_YEAR}}`).
-- Update [build.cake](/build.cake) in the root folder and replace the `DefaultSolutionName` constant at the start of the file with the name of your solution file.
-- Create new library and application projects in the `src` folder.
-- Create test and benchmarking projects in the `test` folder.
-- Create example projects that demonstrate the library and application projects in the `samples` folder.
+A C# library for extracting time series data from JSON using `System.Text.Json`.
 
 
-# Repository Structure
+# Usage
 
-The repository is organised as follows:
+Call `TimeSeriesExtractor.GetSamples` to extract values from a JSON string or a `JsonElement`. The JSON must either be an object, or an array of objects. You can customise the extraction  behaviour by passing a `TimeSeriesExtractorOptions` object to the method.
 
-- `[root]`
-  - `.editorconfig` - Code style rules (see [here](https://editorconfig.org/) for details).
-  - `.gitattributes`
-  - `.gitignore`
-  - `build.cake` - [Cake](https://cakebuild.net/) script for building the projects.
-  - `build.ps1` - PowerShell script to bootstrap and run the Cake script.
-  - `Directory.Build.props` - Common MSBuild properties and targets (see [here](https://docs.microsoft.com/en-us/visualstudio/msbuild/customize-your-build) for details).
-  - `Directory.Build.targets` - Common MSBuild properties and targets (see [here](https://docs.microsoft.com/en-us/visualstudio/msbuild/customize-your-build) for details). 
-  - `README.md`
-  - `RENAME-ME.sln` - Visual Studio solution file.
-  - `[build]` - Resources for building the solution.
-    - `build-state.cake` - Additional build script.
-    - `build-utilities.cake` - Additional build script.
-    - `Dependencies.props` - Common NuGet package versions.
-    - `NetFX.targets` - Adds package references for building projects that target .NET Framework on non-Windows systems.
-    - `version.json` - Defines version numbers used when building the projects.
-  - `[samples]` - Example projects to demonstrate the usage of the repository libraries and applications.
-    - `Directory.Build.props` - Common MSBuild properties and targets related to example projects (see [here](https://docs.microsoft.com/en-us/visualstudio/msbuild/customize-your-build) for details).
-  - `[src]` - Source code for repository libraries and applications.
-  - `[test]` - Test and benchmarking projects.
-    - `Directory.Build.props` - Common MSBuild properties and targets related to test projects (see [here](https://docs.microsoft.com/en-us/visualstudio/msbuild/customize-your-build) for details).
+
+## Data Samples
+
+Properties on the JSON objects are converted to instances of `TimeSeriesSample`. Although the type of the `Value` property on `TimeSeriesSample` is `object`, in practical terms the value will either be `null`, or one of the following types:
+
+- `double`
+- `string`
+- `bool`
+
+
+## Selecting the Timestamp
+
+By default, `TimeSeriesExtractor` will try and use a property on your object named `time` or `timestamp` to extract the timestamp for each sample. The property name check is case-insensitive. If a timestamp cannot be extracted, the value assigned to the `NowTimestamp` property on the `TimeSeriesExtractorOptions` is used.
+
+Alternatively, you can assign a delegate to the `IsTimestampProperty` on `TimeSeriesExtractorOptions` to select the timestamp property manually.
+
+
+## Selecting the Properties to Handle
+
+By default, `TimeSeriesExtractor` will create a sample for each property on the object except for the timestamp property. To customise if a property will be included or excluded, you can assign a delegate to the `IncludeProperty` property on the `TimeSeriesExtractorOptions` instance passed to the extractor. For example:
+
+```
+new TimeSeriesExtractorOptions() {
+  IncludeProperty = prop => {
+    switch (prop) {
+      case "temperature":
+      case "pressure":
+      case "humidity":
+        return true;
+      default:
+        return false;
+    }
+  }
+}
+```
+
+
+## Data Sample Keys
+
+Each `TimeSeriesSample` has a `Key` property that is used to identify the JSON property that was used to generate the sample. The key is generated from the `Template` property on the `TimeSeriesExtractorOptions` class. For example:
+
+```
+devices/{deviceId}/instruments/{$prop}
+```
+
+The parts of the template enclosed in `{` and `}` are placeholders that will be replaced at runtime; `{deviceId}` will be replaced with the value of the property named `deviceId` or the same object as the property being processed, and `{$prop}` will be replaced with the name of the property itself. For example, consider the following JSON:
+
+```json
+{
+  "deviceId": 7,
+  "temperature": 28.9
+}
+```
+
+When processing the `temperature` property on the JSON object using the template above, the key that would be generated would be `devices/7/instruments/temperature`. You can also provide default template replacement values via the `TemplateReplacements` property on `TimeSeriesExtractorOptions`; these will be used if a referenced property name does not exist on the JSON object being processed.
+
+The default key template if one is not specified is simply `{prop$}` (i.e. the property name).
+
+
+## Recursive Processing
+
+The default behaviour of `TimeSeriesExtractor` is to process top-level properties on the specified JSON object only. For example, consider the following JSON:
+
+```json
+{
+  "temperature": 28.1,
+  "pressure": 1020.99,
+  "acceleration": {
+    "x": -0.876,
+    "y": 0.516,
+    "z": -0.044
+  }
+}
+```
+
+The default behaviour of `TimeSeriesExtractor` would be to emit 3 samples, despite the `acceleration` property defining a nested structure containing additional data:
+
+- `temperature`: 28.1
+- `pressure`: 1020.99
+- `acceleration`: "{ \"x\": -0.876, \"y\": 0.516, \"z\": -0.044 }"
+
+In this circumstance, it is desirable to recursively process the nested object and emit a sample for each of the sub-properties. This can be done by setting the `Recursive` property on `TimeSeriesExtractorOptions` to `true`. When recursive mode is enabled, the `{$prop}` replacement in the key template consists of a delimited list of all of the property names that were traversed from the root object to current property. The `PathSeparator` property on `TimeSeriesExtractorOptions` defines the delimeter to use (default: `/`).
+
+With recursive mode enabled, the same JSON above would result in 5 samples being emitted:
+
+- `temperature`: 28.1
+- `pressure`: 1020.99
+- `acceleration/x`: -0.876
+- `acceleration/y`: 0.516
+- `acceleration/z`: -0.044
+
+> When recursive mode is enabled, the extractor will also iterate over nested arrays. The array index will be used as the local property name when replacing the `{$prop}` template replacement.
+
+### A Note on Recursive Mode Template Replacements
+
+In recursive mode, template replacements are resolved using all objects in the hierarchy from the root to the current object, and the matches are concatenated together with the configured path separator. Consider the following JSON:
+
+```json
+{
+  "location": "System A",
+  "measurements": {
+    "location": "Subsystem 1",
+    "temperature": 57.6
+  }
+}
+```
+
+Given a key template of `{location}/{$prop}`, the key generated for the nested `temperature` property would be `System A/Subsystem 1/measurements/temperature`.
 
 
 # Building the Solution

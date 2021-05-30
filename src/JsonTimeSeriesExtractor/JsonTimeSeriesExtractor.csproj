@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net461</TargetFrameworks>
+    <RootNamespace>Jaahas.Json</RootNamespace>
+    <AssemblyName>Jaahas.Json.TimeSeriesExtractor</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="$(SystemTextJsonVersion)" />
+  </ItemGroup>
+
+</Project>
