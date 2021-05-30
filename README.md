@@ -17,7 +17,7 @@ const string json = @"{ ""timestamp"": ""2021-05-30T09:47:38Z"", ""temperature""
 var samples = TimeSeriesExtractor.GetSamples(json).ToArray();
 ```
 
-The JSON must either be an object, or an array of objects. You can customise the extraction  behaviour by passing a [TimeSeriesExtractorOptions](/src/JsonTimeSeriesExtractor/TimeSeriesExtractorOptions.cs) object to the method.
+The JSON must either be an object, or an array of objects. You can customise the extraction behaviour by passing a [TimeSeriesExtractorOptions](/src/JsonTimeSeriesExtractor/TimeSeriesExtractorOptions.cs) object when calling the method.
 
 
 ## Data Samples
