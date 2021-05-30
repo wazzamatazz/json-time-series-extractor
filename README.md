@@ -1,6 +1,6 @@
 # Jaahas.Json.TimeSeriesExtractor
 
-A C# library for extracting time series data from JSON using `System.Text.Json`.
+A C# library for extracting time series data from JSON using `System.Text.Json`. This can be useful when e.g. JSON data is received from an IoT device and the data must be separated into individual series for storage in a database.
 
 
 # Usage
