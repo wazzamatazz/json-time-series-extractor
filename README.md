@@ -12,7 +12,7 @@ Call `TimeSeriesExtractor.GetSamples` to extract values from a JSON string or a 
 
 ## Data Samples
 
-Properties on the JSON objects are converted to instances of `TimeSeriesSample`. Although the type of the `Value` property on `TimeSeriesSample` is `object`, in practical terms the value will either be `null`, or one of the following types:
+Properties on the JSON objects are converted to instances of [TimeSeriesSample](/src/JsonTimeSeriesExtractor/TimeSeriesSample.cs). Although the type of the `Value` property on `TimeSeriesSample` is `object`, in practical terms the value will either be `null`, or one of the following types:
 
 - `double`
 - `string`
