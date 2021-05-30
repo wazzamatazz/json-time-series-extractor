@@ -5,7 +5,9 @@ A C# library for extracting time series data from JSON using `System.Text.Json`.
 
 # Usage
 
-Call `TimeSeriesExtractor.GetSamples` to extract values from a JSON string or a `JsonElement`. The JSON must either be an object, or an array of objects. You can customise the extraction  behaviour by passing a `TimeSeriesExtractorOptions` object to the method.
+The [TimeSeriesExtractor](/src/JsonTimeSeriesExtractor/TimeSeriesExtractor.cs) class is the entry point for the library.
+
+Call `TimeSeriesExtractor.GetSamples` to extract values from a JSON string or a `JsonElement`. The JSON must either be an object, or an array of objects. You can customise the extraction  behaviour by passing a [TimeSeriesExtractorOptions](/src/JsonTimeSeriesExtractor/TimeSeriesExtractorOptions.cs) object to the method.
 
 
 ## Data Samples
@@ -21,14 +23,20 @@ Properties on the JSON objects are converted to instances of `TimeSeriesSample`.
 
 By default, `TimeSeriesExtractor` will try and use a property on your object named `time` or `timestamp` to extract the timestamp for each sample. The property name check is case-insensitive. If a timestamp cannot be extracted, the value assigned to the `NowTimestamp` property on the `TimeSeriesExtractorOptions` is used.
 
-Alternatively, you can assign a delegate to the `IsTimestampProperty` on `TimeSeriesExtractorOptions` to select the timestamp property manually.
+Alternatively, you can assign a delegate to the `IsTimestampProperty` on `TimeSeriesExtractorOptions` to select the timestamp property manually:
+
+```csharp
+new TimeSeriesExtractorOptions() {
+  IsTimestampProperty = prop => prop.Equals("sampleTime")
+}
+```
 
 
 ## Selecting the Properties to Handle
 
 By default, `TimeSeriesExtractor` will create a sample for each property on the object except for the timestamp property. To customise if a property will be included or excluded, you can assign a delegate to the `IncludeProperty` property on the `TimeSeriesExtractorOptions` instance passed to the extractor. For example:
 
-```
+```csharp
 new TimeSeriesExtractorOptions() {
   IncludeProperty = prop => {
     switch (prop) {
@@ -84,9 +92,9 @@ The default behaviour of `TimeSeriesExtractor` is to process top-level propertie
 
 The default behaviour of `TimeSeriesExtractor` would be to emit 3 samples, despite the `acceleration` property defining a nested structure containing additional data:
 
-- `temperature`: 28.1
-- `pressure`: 1020.99
-- `acceleration`: "{ \"x\": -0.876, \"y\": 0.516, \"z\": -0.044 }"
+- `temperature`: `28.1`
+- `pressure`: `1020.99`
+- `acceleration`: `"{ \"x\": -0.876, \"y\": 0.516, \"z\": -0.044 }"`
 
 In this circumstance, it is desirable to recursively process the nested object and emit a sample for each of the sub-properties. This can be done by setting the `Recursive` property on `TimeSeriesExtractorOptions` to `true`. When recursive mode is enabled, the `{$prop}` replacement in the key template consists of a delimited list of all of the property names that were traversed from the root object to current property. The `PathSeparator` property on `TimeSeriesExtractorOptions` defines the delimeter to use (default: `/`).
 
