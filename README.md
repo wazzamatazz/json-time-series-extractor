@@ -64,13 +64,15 @@ new TimeSeriesExtractorOptions() {
 
 ## Data Sample Keys
 
-Each `TimeSeriesSample` has a `Key` property that is used to identify the JSON property that was used to generate the sample. The key is generated from the `Template` property on the `TimeSeriesExtractorOptions` class. For example:
+Each `TimeSeriesSample` has a `Key` property that is used to identify the JSON property that was used to generate the sample. The key is generated from the `Template` property on the `TimeSeriesExtractorOptions` class. Consider the following example template:
 
 ```
 devices/{deviceId}/instruments/{$prop}
 ```
 
-The parts of the template enclosed in `{` and `}` are placeholders that will be replaced at runtime; `{deviceId}` will be replaced with the value of the property named `deviceId` or the same object as the property being processed, and `{$prop}` will be replaced with the name of the property itself. For example, consider the following JSON:
+The parts of the template enclosed in `{` and `}` are placeholders that will be replaced at runtime; `{deviceId}` will be replaced with the value of the property named `deviceId` on the same object as the property being processed, and `{$prop}` will be replaced with the name of the property itself.
+
+Here is an example JSON document:
 
 ```json
 {
@@ -149,7 +151,7 @@ In recursive mode, template replacements are resolved using all objects in the h
 }
 ```
 
-Given a key template of `{location}/{$prop}`, the key generated for the nested `temperature` property would be `System A/Subsystem 1/measurements/temperature`.
+Given a template of `{location}/{$prop}`, the key generated for the nested `temperature` property would be `System A/Subsystem 1/measurements/temperature`.
 
 
 # Building the Solution
