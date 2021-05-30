@@ -106,7 +106,24 @@ With recursive mode enabled, the same JSON above would result in 5 samples being
 - `acceleration/y`: 0.516
 - `acceleration/z`: -0.044
 
-> When recursive mode is enabled, the extractor will also iterate over nested arrays. The array index will be used as the local property name when replacing the `{$prop}` template replacement.
+When recursive mode is enabled, the extractor will also iterate over nested arrays. The array index will be used as the local property name when replacing the `{$prop}` template replacement. For example:
+
+```json
+{
+  "temperatures": [
+    37.7,
+    38.1,
+    37.9
+  ]
+}
+```
+
+The samples emitted would be:
+
+- `temperatures/0`: 37.7
+- `temperatures/1`: 38.1
+- `temperatures/2`: 37.9
+
 
 ### A Note on Recursive Mode Template Replacements
 
