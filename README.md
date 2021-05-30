@@ -7,7 +7,17 @@ A C# library for extracting time series data from JSON using `System.Text.Json`.
 
 The [TimeSeriesExtractor](/src/JsonTimeSeriesExtractor/TimeSeriesExtractor.cs) class is the entry point for the library.
 
-Call `TimeSeriesExtractor.GetSamples` to extract values from a JSON string or a `JsonElement`. The JSON must either be an object, or an array of objects. You can customise the extraction  behaviour by passing a [TimeSeriesExtractorOptions](/src/JsonTimeSeriesExtractor/TimeSeriesExtractorOptions.cs) object to the method.
+Call `TimeSeriesExtractor.GetSamples` to extract values from a JSON string or a `JsonElement`: 
+
+```csharp
+const string json = @"{ ""timestamp"": ""2021-05-30T09:47:38Z"", ""temperature"": 24.7, ""pressure"": 1021.3, ""humidity"": 33.76 }";
+
+// GetSamples uses lazy evaluation; use the ToArray extension from 
+// System.Linq to force eager evaluation.
+var samples = TimeSeriesExtractor.GetSamples(json).ToArray();
+```
+
+The JSON must either be an object, or an array of objects. You can customise the extraction  behaviour by passing a [TimeSeriesExtractorOptions](/src/JsonTimeSeriesExtractor/TimeSeriesExtractorOptions.cs) object to the method.
 
 
 ## Data Samples
