@@ -100,11 +100,11 @@ In this circumstance, it is desirable to recursively process the nested object a
 
 With recursive mode enabled, the same JSON above would result in 5 samples being emitted:
 
-- `temperature`: 28.1
-- `pressure`: 1020.99
-- `acceleration/x`: -0.876
-- `acceleration/y`: 0.516
-- `acceleration/z`: -0.044
+- `temperature`: `28.1`
+- `pressure`: `1020.99`
+- `acceleration/x`: `-0.876`
+- `acceleration/y`: `0.516`
+- `acceleration/z`: `-0.044`
 
 When recursive mode is enabled, the extractor will also iterate over nested arrays. The array index will be used as the local property name when replacing the `{$prop}` template replacement. For example:
 
