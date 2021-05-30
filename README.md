@@ -120,9 +120,9 @@ When recursive mode is enabled, the extractor will also iterate over nested arra
 
 The samples emitted would be:
 
-- `temperatures/0`: 37.7
-- `temperatures/1`: 38.1
-- `temperatures/2`: 37.9
+- `temperatures/0`: `37.7`
+- `temperatures/1`: `38.1`
+- `temperatures/2`: `37.9`
 
 
 ### A Note on Recursive Mode Template Replacements
