@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text.Json;
 
 namespace Jaahas.Json {
 
@@ -103,11 +104,22 @@ namespace Jaahas.Json {
         /// property name.
         /// </summary>
         /// <remarks>
+        /// 
+        /// <para>
+        ///   The parameter passed to the delegate is an array of <see cref="KeyValuePair{String, JsonElement}"/> 
+        ///   that represents the JSON property names and elements that have been visited to reach 
+        ///   the property that is currently being processed, with the entry for the current 
+        ///   property first on the list, and the entry for the property on the root object last.
+        /// </para>
+        /// 
+        /// <para>
         ///   When <see cref="IncludeProperty"/> is <see langword="null"/>, the default behaviour 
         ///   is to emit a sample for every property except for the property identified as the 
         ///   timestamp property.
+        /// </para>
+        /// 
         /// </remarks>
-        public Func<string, bool>? IncludeProperty { get; set; } = null;
+        public Func<KeyValuePair<string?, JsonElement>[], bool>? IncludeProperty { get; set; } = null;
 
         /// <summary>
         /// When <see langword="true"/>, JSON properties that contain other objects or arrays will 

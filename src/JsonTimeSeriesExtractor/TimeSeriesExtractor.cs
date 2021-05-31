@@ -94,31 +94,42 @@ namespace Jaahas.Json {
                 sampleTime = options.NowTimestamp ?? DateTimeOffset.UtcNow;
             }
 
-            return GetSamplesCore(
-                new Stack<JsonElement>(),
-                sampleTime,
-                element,
-                null,
-                new Stack<string>(),
-                options.Template,
-                options.TemplateReplacements,
-                options.IncludeProperty == null
-                    ? timestampPropName == null
-                        ? null
-                        : prop => !string.Equals(prop, timestampPropName, StringComparison.Ordinal)
-                    : timestampPropName == null
-                        ? options.IncludeProperty
-                        : prop => !string.Equals(prop, timestampPropName, StringComparison.Ordinal) && options.IncludeProperty.Invoke(prop),
-                options.Recursive,
-                options.PathSeparator
-            );
+            var elementStack = new Stack<KeyValuePair<string?, JsonElement>>();
+            // Push root object onto stack.
+            elementStack.Push(new KeyValuePair<string?, JsonElement>(null, element));
+
+            Func<KeyValuePair<string?, JsonElement>[], bool>? handleProperty = options.IncludeProperty == null
+                ? timestampPropName == null
+                    ? null
+                    : (stack) => !string.Equals(stack[0].Key, timestampPropName, StringComparison.Ordinal)
+                : timestampPropName == null
+                    ? options.IncludeProperty
+                    : (stack) => !string.Equals(stack[0].Key, timestampPropName, StringComparison.Ordinal) && options.IncludeProperty.Invoke(stack);
+
+            foreach (var prop in element.EnumerateObject()) {
+                elementStack.Push(new KeyValuePair<string?, JsonElement>(prop.Name, prop.Value));
+
+                foreach (var val in GetSamplesCore(
+                    elementStack,
+                    sampleTime,
+                    options.Template,
+                    options.TemplateReplacements,
+                    handleProperty,
+                    options.Recursive,
+                    options.PathSeparator
+                )) {
+                    yield return val;
+                }
+
+                elementStack.Pop();
+            }
         }
 
 
         /// <summary>
         /// Extracts samples from a JSON element.
         /// </summary>
-        /// <param name="objectStack">
+        /// <param name="elementStack">
         ///   The stack of objects with the current object being processed at the top and the root 
         ///   object in the hierarchy at the bottom.
         /// </param>
@@ -151,48 +162,46 @@ namespace Jaahas.Json {
         ///   The extracted tag values.
         /// </returns>
         private static IEnumerable<TimeSeriesSample> GetSamplesCore(
-            Stack<JsonElement> objectStack,
+            Stack<KeyValuePair<string?, JsonElement>> elementStack,
             DateTimeOffset sampleTime,
-            JsonElement element,
-            string? propertyName,
-            Stack<string> propertyNameStack,
             string sampleKeyTemplate,
             IDictionary<string, string>? templateReplacements,
-            Func<string, bool>? includeProperty,
+            Func<KeyValuePair<string?, JsonElement>[], bool>? includeProperty,
             bool recursive,
             string? pathSeparator
         ) {
-            if (propertyName != null) {
-                // currentPropertyName should only be null for top-level objects!
+            KeyValuePair<string?, JsonElement>[]? elementStackArray = null;
 
+            KeyValuePair<string?, JsonElement>[] BuildElementStackArray() {
+                elementStackArray ??= elementStack.ToArray();
+                return elementStackArray;
+            }
+
+            if (includeProperty != null) {
                 // Check if this property should be included.
-                if (!(includeProperty?.Invoke(propertyName) ?? true)) {
+                if (!includeProperty.Invoke(BuildElementStackArray())) {
                     yield break;
                 }
             }
+
+            var currentElement = elementStack.Peek();
 
             if (recursive) {
                 if (string.IsNullOrWhiteSpace(pathSeparator)) {
                     pathSeparator = "/";
                 };
 
-                switch (element.ValueKind) {
+                switch (currentElement.Value.ValueKind) {
                     case JsonValueKind.Object:
                     case JsonValueKind.Array:
-                        if (element.ValueKind == JsonValueKind.Object) {
-                            objectStack.Push(element);
 
-                            if (propertyName != null) {
-                                propertyNameStack.Push(propertyName);
-                            }
+                        if (currentElement.Value.ValueKind == JsonValueKind.Object) {
+                            foreach (var item in currentElement.Value.EnumerateObject()) {
+                                elementStack.Push(new KeyValuePair<string?, JsonElement>(item.Name, item.Value));
 
-                            foreach (var item in element.EnumerateObject()) {
                                 foreach (var val in GetSamplesCore(
-                                    objectStack,
+                                    elementStack,
                                     sampleTime,
-                                    item.Value,
-                                    item.Name,
-                                    propertyNameStack,
                                     sampleKeyTemplate,
                                     templateReplacements,
                                     includeProperty,
@@ -201,33 +210,20 @@ namespace Jaahas.Json {
                                 )) {
                                     yield return val;
                                 }
-                            }
 
-                            if (propertyName != null) {
-                                propertyNameStack.Pop();
+                                elementStack.Pop();
                             }
-
-                            objectStack.Pop();
                         }
                         else {
                             var index = -1;
-                            foreach (var item in element.EnumerateArray()) {
-                                if (item.ValueKind == JsonValueKind.Object) {
-                                    objectStack.Push(item);
-                                }
-
+                            foreach (var item in currentElement.Value.EnumerateArray()) {
                                 ++index;
 
-                                if (propertyName != null) {
-                                    propertyNameStack.Push(propertyName);
-                                }
+                                elementStack.Push(new KeyValuePair<string?, JsonElement>(index.ToString(), item));
 
                                 foreach (var val in GetSamplesCore(
-                                    objectStack,
+                                    elementStack,
                                     sampleTime,
-                                    item,
-                                    index.ToString(),
-                                    propertyNameStack,
                                     sampleKeyTemplate,
                                     templateReplacements,
                                     includeProperty,
@@ -237,75 +233,37 @@ namespace Jaahas.Json {
                                     yield return val;
                                 }
 
-                                if (propertyName != null) {
-                                    propertyNameStack.Pop();
-                                }
-
-                                if (item.ValueKind == JsonValueKind.Object) {
-                                    objectStack.Pop();
-                                }
+                                elementStack.Pop();
                             }
                         }
 
                         break;
                     default:
-                        if (propertyName == null) {
+                        if (elementStack.Count == 0) {
                             yield break;
                         }
 
                         var key = BuildSampleKeyFromTemplate(
-                            objectStack,
+                            BuildElementStackArray(),
                             recursive,
                             pathSeparator!,
-                            propertyName, 
-                            propertyNameStack,
                             sampleKeyTemplate, 
                             templateReplacements
                         );
-                        yield return BuildSampleFromJsonValue(sampleTime, key, element);
+
+                        yield return BuildSampleFromJsonValue(sampleTime, key, currentElement.Value);
                         break;
                 }
             }
             else {
-                if (objectStack.Count == 0) {
-                    // This is the root object.
-                    objectStack.Push(element);
-
-                    foreach (var item in element.EnumerateObject()) {
-                        foreach (var val in GetSamplesCore(
-                            objectStack,
-                            sampleTime,
-                            item.Value,
-                            item.Name,
-                            propertyNameStack,
-                            sampleKeyTemplate,
-                            templateReplacements,
-                            includeProperty,
-                            false,
-                            pathSeparator
-                        )) {
-                            yield return val;
-                        }
-                    }
-
-                    objectStack.Pop();
-                }
-                else {
-                    if (propertyName == null) {
-                        yield break;
-                    }
-
-                    var tagName = BuildSampleKeyFromTemplate(
-                        objectStack,
-                        recursive,
-                        pathSeparator!,
-                        propertyName,
-                        propertyNameStack,
-                        sampleKeyTemplate,
-                        templateReplacements
-                    );
-                    yield return BuildSampleFromJsonValue(sampleTime, tagName, element);
-                }
+                var tagName = BuildSampleKeyFromTemplate(
+                    BuildElementStackArray(),
+                    recursive,
+                    pathSeparator!,
+                    sampleKeyTemplate,
+                    templateReplacements
+                );
+                yield return BuildSampleFromJsonValue(sampleTime, tagName, currentElement.Value);
             }
         }
 
@@ -375,25 +333,18 @@ namespace Jaahas.Json {
         /// <summary>
         /// Builds a key for a <see cref="TimeSeriesSample"/> from the specified template.
         /// </summary>
-        /// <param name="objectStack">
+        /// <param name="elementStack">
         ///   The stack of objects with the current object being processed at the top and the root 
         ///   object in the hierarchy at the bottom.
         /// </param>
         /// <param name="recursive">
         ///   When <see langword="true"/>, all matching replacements from all levels of the 
-        ///   <paramref name="objectStack"/> will be returned, instead of just looking at the 
+        ///   <paramref name="elementStack"/> will be returned, instead of just looking at the 
         ///   object on top of the stack.
         /// </param>
         /// <param name="pathSeparator">
         ///   The path separator to use when joining multiple replacements together in recursive 
         ///   mode.
-        /// </param>
-        /// <param name="propertyName">
-        ///   The local name of the property that the sample is being generated for.
-        /// </param>
-        /// <param name="propertyNameStack">
-        ///   The property name stack (that is, the names of all of the properties in ancestor 
-        ///   objects that led to <paramref name="propertyName"/>).
         /// </param>
         /// <param name="template">
         ///   The sample key template.
@@ -406,31 +357,37 @@ namespace Jaahas.Json {
         ///   The generated key.
         /// </returns>
         private static string BuildSampleKeyFromTemplate(
-            Stack<JsonElement> objectStack, 
+            KeyValuePair<string?, JsonElement>[] elementStack, 
             bool recursive, 
             string pathSeparator, 
-            string propertyName, 
-            Stack<string> propertyNameStack,
             string template, 
             IDictionary<string, string>? defaultReplacements
         ) {
-            var objectStackInHierarchyOrder = recursive
-                ? objectStack.ToArray().Reverse().ToArray()
-                : Array.Empty<JsonElement>();
+            var top = elementStack[0];
+            var closestObject = elementStack.FirstOrDefault(x => x.Value.ValueKind == JsonValueKind.Object);
 
-            string? GetFullPropertyName() {
-                if (propertyNameStack.Count == 0) {
-                    return propertyName;
+            var elementStackInHierarchyOrder = recursive
+                ? elementStack.Reverse().ToArray()
+                : Array.Empty<KeyValuePair<string?, JsonElement>>();
+
+            string? GetFullPropertyName(bool forceLocalName = false) {
+                if (!recursive || forceLocalName) {
+                    return top.Key;
                 }
 
-                return string.Concat(string.Join(pathSeparator, propertyNameStack.Reverse()), pathSeparator, propertyName);
+                var fullName = string.Join(pathSeparator, elementStackInHierarchyOrder.Where(x => x.Key != null).Select(x => x.Key));
+                if (string.IsNullOrEmpty(fullName)) {
+                    return null;
+                }
+
+                return fullName;
             }
 
             return s_tagNameTemplateMatcher.Replace(template, m => {
                 var pName = m.Groups["property"].Value;
 
-                if (string.Equals(pName, "$prop")) {
-                    return GetFullPropertyName() ?? m.Value;
+                if (string.Equals(pName, "$prop", StringComparison.Ordinal) || string.Equals(pName, "$prop-local", StringComparison.Ordinal)) {
+                    return GetFullPropertyName(string.Equals(pName, "$prop-local", StringComparison.Ordinal)) ?? m.Value;
                 }
 
                 if (recursive) {
@@ -439,12 +396,12 @@ namespace Jaahas.Json {
 
                     var propVals = new List<string>();
                     
-                    foreach (var obj in objectStackInHierarchyOrder) {
-                        if (obj.ValueKind != JsonValueKind.Object) {
+                    foreach (var obj in elementStackInHierarchyOrder) {
+                        if (obj.Value.ValueKind != JsonValueKind.Object) {
                             continue;
                         }
 
-                        if (obj.TryGetProperty(pName, out var prop)) {
+                        if (obj.Value.TryGetProperty(pName, out var prop)) {
                             propVals.Add(prop.ValueKind == JsonValueKind.String ? prop.GetString()! : prop.GetRawText());
                         }
                     }
@@ -454,11 +411,10 @@ namespace Jaahas.Json {
                     }
                 }
                 else {
-                    // Non-recursive mode: peek at the object on the top of the stack (i.e. the
-                    // current object being processed) and try and get the referenced property.
+                    // Non-recursive mode: use the nearest object to the item we are processing to
+                    // try and get the referenced property.
 
-                    var top = objectStack.Peek();
-                    if (top.ValueKind == JsonValueKind.Object && top.TryGetProperty(pName, out var prop)) {
+                    if (closestObject.Value.ValueKind == JsonValueKind.Object && closestObject.Value.TryGetProperty(pName, out var prop)) {
                         return prop.ValueKind == JsonValueKind.String ? prop.GetString()! : prop.GetRawText();
                     }
                 }

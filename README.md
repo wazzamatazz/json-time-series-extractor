@@ -17,7 +17,7 @@ const string json = @"{ ""timestamp"": ""2021-05-30T09:47:38Z"", ""temperature""
 var samples = TimeSeriesExtractor.GetSamples(json).ToArray();
 ```
 
-The JSON must either be an object, or an array of objects. You can customise the extraction behaviour by passing a [TimeSeriesExtractorOptions](/src/JsonTimeSeriesExtractor/TimeSeriesExtractorOptions.cs) object when calling the method.
+The JSON document must represent an object or an array of objects. You can customise the extraction behaviour by passing a [TimeSeriesExtractorOptions](/src/JsonTimeSeriesExtractor/TimeSeriesExtractorOptions.cs) object when calling the method.
 
 
 ## Data Samples
@@ -44,12 +44,17 @@ new TimeSeriesExtractorOptions() {
 
 ## Selecting the Properties to Handle
 
-By default, `TimeSeriesExtractor` will create a sample for each property on the object except for the timestamp property. To customise if a property will be included or excluded, you can assign a delegate to the `IncludeProperty` property on the `TimeSeriesExtractorOptions` instance passed to the extractor. For example:
+By default, `TimeSeriesExtractor` will create a sample for each property on the object except for the timestamp property. To customise if a property will be included or excluded, you can assign a delegate to the `IncludeProperty` property on the `TimeSeriesExtractorOptions` instance passed to the extractor. The delegate will receive a `KeyValuePair<string?, JsonElement>[]` array, representing the bottom-up list of JSON property names and elements that have been visited to reach the current property (i.e. the entry at index 0 in the array). 
+
+The array is guaranteed to have at least two items; the final `KeyValuePair<string?, JsonElement>` in the array will always have a key of `null` and a `JsonElement` value that represents the root JSON object that is being processed.
+
+For example:
 
 ```csharp
 new TimeSeriesExtractorOptions() {
-  IncludeProperty = prop => {
-    switch (prop) {
+  IncludeProperty = props => {
+    // Check if the current property is allowed
+    switch (props[0].Key) {
       case "temperature":
       case "pressure":
       case "humidity":
@@ -152,6 +157,12 @@ In recursive mode, template replacements are resolved using all objects in the h
 ```
 
 Given a template of `{location}/{$prop}`, the key generated for the nested `temperature` property would be `System A/Subsystem 1/measurements/temperature`.
+
+If you do not want to include the document path in the generated key (i.e. the `measurements/` part in the above example), you can specify `{$prop-local}` in the template instead of `{$prop}`.
+
+Using the above example JSON and a template of `{location}/{$prop-local}`, the key for the nested `temperature` property would be `System A/Subsystem 1/temperature`.
+
+> When recursive mode is disabled, the `{$prop}` and `${prop-local}` template placeholders are functionally identical.
 
 
 # Building the Solution
