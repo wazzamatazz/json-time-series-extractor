@@ -228,6 +228,24 @@ namespace Jaahas.Json {
         public bool Recursive { get; set; }
 
         /// <summary>
+        /// The maximum allowed recursion depth when <see cref="Recursive"/> is <see langword="true"/>.
+        /// </summary>
+        /// <remarks>
+        /// 
+        /// <para>
+        ///   When the recursion depth limit is reached and the current JSON element is an array or 
+        ///   an object, a sample will be emitted that contains the serialized JSON element as its 
+        ///   value instead of recursing into the object or array.
+        /// </para>
+        /// 
+        /// <para>
+        ///   A <see cref="MaxDepth"/> of less than one specifies that there is no recursion limit.
+        /// </para>
+        /// 
+        /// </remarks>
+        public int MaxDepth { get; set; } = 5;
+
+        /// <summary>
         /// When <see cref="Recursive"/> is <see langword="true"/>, <see cref="PathSeparator"/> is 
         /// used to separate hierarchy levels when processing nested objects and arrays.
         /// </summary>

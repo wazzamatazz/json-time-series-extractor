@@ -309,5 +309,32 @@ namespace Jaahas.Json.Tests {
             Assert.AreEqual("System A/Subsystem 1/temperature", samples[0].Key);
         }
 
+
+        [TestMethod]
+        public void ShouldObeyRecursionDepthLimit() {
+            var testObject = new {
+                location = "System A",
+                measurements = new {
+                    location = "Subsystem 1",
+                    temperature = 14
+                }
+            };
+
+            var json = JsonSerializer.Serialize(testObject);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                Recursive = true,
+                MaxDepth = 1
+            }).ToArray();
+
+            Assert.AreEqual(2, samples.Length);
+
+            Assert.AreEqual("location", samples[0].Key);
+            Assert.AreEqual(testObject.location, samples[0].Value);
+            
+            Assert.AreEqual("measurements", samples[1].Key);
+            Assert.AreEqual(@"{""location"":""Subsystem 1"",""temperature"":14}", samples[1].Value);
+        }
+
     }
 }

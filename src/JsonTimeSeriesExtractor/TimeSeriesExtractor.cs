@@ -116,6 +116,8 @@ namespace Jaahas.Json {
                     options.TemplateReplacements,
                     handleProperty,
                     options.Recursive,
+                    options.MaxDepth,
+                    1,
                     options.PathSeparator
                 )) {
                     yield return val;
@@ -155,6 +157,12 @@ namespace Jaahas.Json {
         /// <param name="recursive">
         ///   Specifies if recursive mode is enabled.
         /// </param>
+        /// <param name="maxRecursionDepth">
+        ///   The maximum number of recursive calls that the method is allowed to make.
+        /// </param>
+        /// <param name="currentRecursionDepth">
+        ///   The recursion depth for the current iteration of the method.
+        /// </param>
         /// <param name="pathSeparator">
         ///   The recursive path separator to use.
         /// </param>
@@ -168,6 +176,8 @@ namespace Jaahas.Json {
             IDictionary<string, string>? templateReplacements,
             Func<KeyValuePair<string?, JsonElement>[], bool>? includeProperty,
             bool recursive,
+            int maxRecursionDepth,
+            int currentRecursionDepth,
             string? pathSeparator
         ) {
             KeyValuePair<string?, JsonElement>[]? elementStackArray = null;
@@ -186,7 +196,24 @@ namespace Jaahas.Json {
 
             var currentElement = elementStack.Peek();
 
-            if (recursive) {
+            if (!recursive || (maxRecursionDepth > 0 && currentRecursionDepth >= maxRecursionDepth)) {
+                // We are not using recursive mode, or we have exceeded the maximum recursion
+                // depth; build a sample with the current element. When we have exceeded the
+                // maximum recursion depth, the value will be the serialized JSON of the element
+                // if the element is an object or an array.
+                var tagName = BuildSampleKeyFromTemplate(
+                    BuildElementStackArray(),
+                    recursive,
+                    pathSeparator!,
+                    sampleKeyTemplate,
+                    templateReplacements
+                );
+                yield return BuildSampleFromJsonValue(sampleTime, tagName, currentElement.Value);
+            }
+            else {
+                // We have doing recursive processing and have not exceeded the maximum recursion
+                // depth, so continue as normal.
+
                 if (string.IsNullOrWhiteSpace(pathSeparator)) {
                     pathSeparator = "/";
                 };
@@ -194,7 +221,6 @@ namespace Jaahas.Json {
                 switch (currentElement.Value.ValueKind) {
                     case JsonValueKind.Object:
                     case JsonValueKind.Array:
-
                         if (currentElement.Value.ValueKind == JsonValueKind.Object) {
                             foreach (var item in currentElement.Value.EnumerateObject()) {
                                 elementStack.Push(new KeyValuePair<string?, JsonElement>(item.Name, item.Value));
@@ -206,6 +232,8 @@ namespace Jaahas.Json {
                                     templateReplacements,
                                     includeProperty,
                                     recursive,
+                                    maxRecursionDepth, 
+                                    currentRecursionDepth + 1,
                                     pathSeparator
                                 )) {
                                     yield return val;
@@ -228,6 +256,8 @@ namespace Jaahas.Json {
                                     templateReplacements,
                                     includeProperty,
                                     recursive,
+                                    maxRecursionDepth,
+                                    currentRecursionDepth + 1,
                                     pathSeparator
                                 )) {
                                     yield return val;
@@ -254,16 +284,6 @@ namespace Jaahas.Json {
                         yield return BuildSampleFromJsonValue(sampleTime, key, currentElement.Value);
                         break;
                 }
-            }
-            else {
-                var tagName = BuildSampleKeyFromTemplate(
-                    BuildElementStackArray(),
-                    recursive,
-                    pathSeparator!,
-                    sampleKeyTemplate,
-                    templateReplacements
-                );
-                yield return BuildSampleFromJsonValue(sampleTime, tagName, currentElement.Value);
             }
         }
 
