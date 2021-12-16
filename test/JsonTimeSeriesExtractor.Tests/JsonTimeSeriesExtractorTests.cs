@@ -42,7 +42,7 @@ namespace Jaahas.Json.Tests {
 
 
         [TestMethod]
-        public void ShouldUseDefaultTemplate() {
+        public void ShouldUseDefaultKeyTemplate() {
             var deviceSample = new {
                 Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
                 SignalStrength = -75,
@@ -369,6 +369,26 @@ namespace Jaahas.Json.Tests {
             
             Assert.AreEqual("measurements", samples[1].Key);
             Assert.AreEqual(@"{""location"":""Subsystem 1"",""temperature"":14}", samples[1].Value);
+        }
+
+
+        [TestMethod]
+        public void ShouldUseFallbackTimestamp() {
+            var testObject = new { 
+                value = 99
+            };
+
+            var json = JsonSerializer.Serialize(testObject);
+
+            var fallbackTimestamp = DateTimeOffset.Parse("1999-12-31");
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                Template = TestContext.TestName + "/{$prop}",
+                GetDefaultTimestamp = () => fallbackTimestamp
+            }).ToArray();
+
+            Assert.AreEqual(1, samples.Length);
+            Assert.AreEqual(fallbackTimestamp, samples[0].Timestamp);
         }
 
     }

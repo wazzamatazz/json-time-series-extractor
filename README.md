@@ -36,7 +36,7 @@ Properties on the JSON objects are converted to instances of [TimeSeriesSample](
 
 ## Selecting the Timestamp
 
-By default, `TimeSeriesExtractor` will try and use a property on your object named `time` or `timestamp` to extract the timestamp for each sample. The property name check is case-insensitive. If a timestamp cannot be extracted, the value assigned to the `NowTimestamp` property on the `TimeSeriesExtractorOptions` is used.
+By default, `TimeSeriesExtractor` will try and use a property on your object named `time` or `timestamp` to extract the timestamp for each sample. The property name check is case-insensitive. If a timestamp cannot be extracted, the delegate assigned to the `GetDefaultTimestamp` property on the `TimeSeriesExtractorOptions` is called. If no delegate has been specified, `DateTimeOffset.UtcNow` is used.
 
 Alternatively, you can assign a delegate to the `IsTimestampProperty` on `TimeSeriesExtractorOptions` to select the timestamp property manually:
 

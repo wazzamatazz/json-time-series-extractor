@@ -91,14 +91,14 @@ namespace Jaahas.Json {
             DateTimeOffset sampleTime;
 
             if (!TryGetTimestamp(element, options, out var timestampPropName, out sampleTime)) {
-                sampleTime = options.NowTimestamp ?? DateTimeOffset.UtcNow;
+                sampleTime = options!.GetDefaultTimestamp?.Invoke() ?? DateTimeOffset.UtcNow;
             }
 
             var elementStack = new Stack<KeyValuePair<string?, JsonElement>>();
             // Push root object onto stack.
             elementStack.Push(new KeyValuePair<string?, JsonElement>(null, element));
 
-            Func<KeyValuePair<string?, JsonElement>[], bool>? handleProperty = options.IncludeProperty == null
+            Func<KeyValuePair<string?, JsonElement>[], bool>? handleProperty = options!.IncludeProperty == null
                 ? timestampPropName == null
                     ? null
                     : (stack) => !string.Equals(stack[0].Key, timestampPropName, StringComparison.Ordinal)

@@ -109,7 +109,7 @@ namespace Jaahas.Json {
         /// </para>
         /// 
         /// <para>
-        ///   If no timestamp property can be found, <see cref="NowTimestamp"/> will be 
+        ///   If no timestamp property can be found, <see cref="GetDefaultTimestamp"/> will be 
         ///   used as the sample time.
         /// </para>
         /// 
@@ -117,14 +117,14 @@ namespace Jaahas.Json {
         public Func<string, bool>? IsTimestampProperty { get; set; }
 
         /// <summary>
-        /// The default timestamp to use if a timestamp property cannot be identified on a JSON 
-        /// object.
+        /// A delegate that will retrieve the default sample timestamp to use if a timestamp 
+        /// property cannot be identified on a JSON object.
         /// </summary>
         /// <remarks>
-        ///   Specify <see langword="null"/> to use <see cref="DateTimeOffset.UtcNow"/> as the 
-        ///   default sample timestamp.
+        ///   Specify <see langword="null"/> to use <see cref="DateTimeOffset.UtcNow"/> at the 
+        ///   moment that the JSON is parsed as the default sample timestamp.
         /// </remarks>
-        public DateTimeOffset? NowTimestamp { get; set; }
+        public Func<DateTimeOffset>? GetDefaultTimestamp { get; set; }
 
         /// <summary>
         /// A delegate that is used to determine if a sample should be emitted for a given 
@@ -292,11 +292,11 @@ namespace Jaahas.Json {
                 return;
             }
 
+            GetDefaultTimestamp = existing.GetDefaultTimestamp;
             GetTemplateReplacement = existing.GetTemplateReplacement;
             IncludeProperty = existing.IncludeProperty;
             IsTimestampProperty = existing.IsTimestampProperty;
             MaxDepth = existing.MaxDepth;
-            NowTimestamp = existing.NowTimestamp;
             PathSeparator = existing.PathSeparator;
             Recursive = existing.Recursive;
             Template = existing.Template;
