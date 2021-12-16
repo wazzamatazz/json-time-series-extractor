@@ -5,11 +5,10 @@
     <ParentProject>$([MSBuild]::GetPathOfFileAbove('$(MSBuildThisFile)', '$(MSBuildThisFileDirectory)../'))</ParentProject>
   </PropertyGroup>
   <Import Project="$(ParentProject)" Condition=" '$(ParentProject)' != '' " /> 
-  
-  <!-- Import common NuGet package versions -->
-  <Import Project=".\build\Dependencies.props" Condition="Exists('.\build\Dependencies.props')" />
 
   <PropertyGroup>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>enable</Nullable>
     <Authors>Graham Watts</Authors>
     <PackageProjectUrl>https://github.com/wazzamatazz/json-time-series-extractor</PackageProjectUrl>
     <PackageOutputPath>$(MSBuildThisFileDirectory)artifacts\packages\$(Configuration)</PackageOutputPath>
@@ -18,10 +17,11 @@
     <CopyrightStartYear>2021</CopyrightStartYear>
   </PropertyGroup>
 
-  <PropertyGroup>
-    <LangVersion>9.0</LangVersion>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+  <!-- Import common NuGet package versions -->
+  <Import Project=".\build\Dependencies.props" Condition="Exists('.\build\Dependencies.props')" />
+
+  <!-- Set copyright notice based on CopyrightStartYear property. -->
+  <Import Project=".\build\Copyright.props" Condition="Exists('.\build\Copyright.props')" />
 
   <!-- Extension point to allow Continuous Integration systems to inject their own configuration. -->
   <Import Project="CI.props" Condition="Exists('CI.props')" />
