@@ -287,12 +287,9 @@ namespace Jaahas.Json {
         /// <param name="existing">
         ///   The existing instance.
         /// </param>
-        /// <exception cref="ArgumentNullException">
-        ///   <paramref name="existing"/> is <see langword="null"/>.
-        /// </exception>
-        public TimeSeriesExtractorOptions(TimeSeriesExtractorOptions existing) {
+        public TimeSeriesExtractorOptions(TimeSeriesExtractorOptions? existing) {
             if (existing == null) {
-                throw new ArgumentNullException(nameof(existing));
+                return;
             }
 
             GetTemplateReplacement = existing.GetTemplateReplacement;
