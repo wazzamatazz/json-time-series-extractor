@@ -16,7 +16,6 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <NeutralLanguage>en</NeutralLanguage>
     <CopyrightStartYear>2021</CopyrightStartYear>
-    <VersionPropertiesInputFile Condition="Exists('$(MSBuildThisFileDirectory)build\version.json')">$(MSBuildThisFileDirectory)build\version.json</VersionPropertiesInputFile>
   </PropertyGroup>
 
   <PropertyGroup>
