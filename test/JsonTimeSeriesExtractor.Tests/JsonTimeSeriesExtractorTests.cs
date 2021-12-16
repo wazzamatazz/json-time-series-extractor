@@ -96,8 +96,13 @@ namespace Jaahas.Json.Tests {
             var guid = Guid.NewGuid();
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Template = TestContext.TestName + "/{MacAddress}/{Uuid}/{$prop}",
-                TemplateReplacements = new Dictionary<string, string>() {
-                    ["Uuid"] = guid.ToString()
+                GetTemplateReplacement = text => { 
+                    switch (text.ToUpperInvariant()) {
+                        case "UUID":
+                            return guid.ToString();
+                        default:
+                            return null;
+                    }
                 }
             }).ToArray();
 

@@ -10,6 +10,21 @@ namespace Jaahas.Json {
     public class TimeSeriesExtractorOptions {
 
         /// <summary>
+        /// Default <see cref="Template"/> value.
+        /// </summary>
+        public const string DefaultTemplate = "{$prop}";
+
+        /// <summary>
+        /// Default <see cref="PathSeparator"/> value.
+        /// </summary>
+        public const string DefaultPathSeparator = "/";
+
+        /// <summary>
+        /// Default <see cref="MaxDepth"/> value.
+        /// </summary>
+        public const int DefaultMaxDepth = 5;
+
+        /// <summary>
         /// The template to use when generating keys for extracted values.
         /// </summary>
         /// <remarks>
@@ -49,17 +64,17 @@ namespace Jaahas.Json {
         /// </para>
         /// 
         /// </remarks>
-        public string Template { get; set; } = "{$prop}";
+        public string Template { get; set; } = DefaultTemplate;
 
         /// <summary>
-        /// A dictionary of default <see cref="Template"/> replacements to use if a referenced 
-        /// property is not present in the JSON object.
+        /// A delegate that accepts a placeholder name referenced in the <see cref="Template"/> and
+        /// returns the default replacement for that placeholder.
         /// </summary>
         /// <remarks>
-        ///   Don't include the <c>{</c> and <c>}</c> in the dictionary keys (i.e. use <c>deviceId</c> 
-        ///   and not <c>{deviceId}</c>).
+        ///   The default replacement for a given placeholder is only used if a replacement cannot 
+        ///   be identified from the JSON that is being parsed.
         /// </remarks>
-        public IDictionary<string, string>? TemplateReplacements;
+        public Func<string, string?>? GetTemplateReplacement { get; set; }
 
         /// <summary>
         /// A delegate used to identify the property name that contains the timestamp to use for 
@@ -243,13 +258,45 @@ namespace Jaahas.Json {
         /// </para>
         /// 
         /// </remarks>
-        public int MaxDepth { get; set; } = 5;
+        public int MaxDepth { get; set; } = DefaultMaxDepth;
 
         /// <summary>
         /// When <see cref="Recursive"/> is <see langword="true"/>, <see cref="PathSeparator"/> is 
         /// used to separate hierarchy levels when processing nested objects and arrays.
         /// </summary>
-        public string PathSeparator { get; set; } = "/";
+        public string PathSeparator { get; set; } = DefaultPathSeparator;
+
+
+        /// <summary>
+        /// Creates a new <see cref="TimeSeriesExtractorOptions"/> instance.
+        /// </summary>
+        public TimeSeriesExtractorOptions() { }
+
+
+        /// <summary>
+        /// Creates a new <see cref="TimeSeriesExtractorOptions"/> instance from an existing 
+        /// instance.
+        /// </summary>
+        /// <param name="existing">
+        ///   The existing instance.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        ///   <paramref name="existing"/> is <see langword="null"/>.
+        /// </exception>
+        public TimeSeriesExtractorOptions(TimeSeriesExtractorOptions existing) {
+            if (existing == null) {
+                throw new ArgumentNullException(nameof(existing));
+            }
+
+            GetTemplateReplacement = existing.GetTemplateReplacement;
+            IncludeProperty = existing.IncludeProperty;
+            IsTimestampProperty = existing.IsTimestampProperty;
+            MaxDepth = existing.MaxDepth;
+            NowTimestamp = existing.NowTimestamp;
+            PathSeparator = existing.PathSeparator;
+            Recursive = existing.Recursive;
+            Template = existing.Template;
+        }
 
     }
 }

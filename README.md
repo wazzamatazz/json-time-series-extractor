@@ -91,9 +91,42 @@ Here is an example JSON document:
 }
 ```
 
-When processing the `temperature` property on the JSON object using the template above, the key that would be generated would be `devices/7/instruments/temperature`. You can also provide default template replacement values via the `TemplateReplacements` property on `TimeSeriesExtractorOptions`; these will be used if a referenced property name does not exist on the JSON object being processed.
+When processing the `temperature` property on the JSON object using the template above, the key that would be generated would be `devices/7/instruments/temperature`.
 
 The default key template if one is not specified is simply `{prop$}` (i.e. the property name).
+
+
+### Default Placeholder Values
+
+Default template replacement values can be provided via the `GetTemplateReplacement` property on `TimeSeriesExtractorOptions`; these will be used if a property name referenced in the template does not exist on the JSON object being processed. For example:
+
+Template:
+```
+devices/{deviceId}/instruments/{$prop}
+```
+
+JSON:
+```json
+{
+  "temperature": 97.3
+}
+```
+
+Options:
+```csharp
+new TimeSeriesExtractorOptions() {
+  GetTemplateReplacement = name => {
+    switch (name) {
+      case "deviceId":
+        return "A-001";
+      default:
+        return null;
+    }
+  }
+}
+```
+
+When processing the `temperature` property on the JSON object using the template above, the key that would be generated would be `devices/A-001/instruments/temperature`.
 
 
 ## Recursive Processing

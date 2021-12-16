@@ -113,7 +113,7 @@ namespace Jaahas.Json {
                     elementStack,
                     sampleTime,
                     options.Template,
-                    options.TemplateReplacements,
+                    options.GetTemplateReplacement,
                     handleProperty,
                     options.Recursive,
                     options.MaxDepth,
@@ -138,18 +138,11 @@ namespace Jaahas.Json {
         /// <param name="sampleTime">
         ///   The timestamp to use for extracted tag values.
         /// </param>
-        /// <param name="element">
-        ///   The JSON element that is being processed in this iteration.
-        /// </param>
-        /// <param name="propertyName">
-        ///   The name of the JSON property that is being processed in this iteration. Can be 
-        ///   <see langword="null"/> if <paramref name="element"/> is the root object.
-        /// </param>
         /// <param name="sampleKeyTemplate">
         ///   The sample key template to use for the generated values.
         /// </param>
         /// <param name="templateReplacements">
-        ///   The default replacements for <paramref name="sampleKeyTemplate"/>.
+        ///   A callback for retrieving the default replacements for <paramref name="sampleKeyTemplate"/>.
         /// </param>
         /// <param name="includeProperty">
         ///   A delegate that will check if a given property name should be included.
@@ -173,7 +166,7 @@ namespace Jaahas.Json {
             Stack<KeyValuePair<string?, JsonElement>> elementStack,
             DateTimeOffset sampleTime,
             string sampleKeyTemplate,
-            IDictionary<string, string>? templateReplacements,
+            Func<string, string?>? templateReplacements,
             Func<KeyValuePair<string?, JsonElement>[], bool>? includeProperty,
             bool recursive,
             int maxRecursionDepth,
@@ -381,7 +374,7 @@ namespace Jaahas.Json {
             bool recursive, 
             string pathSeparator, 
             string template, 
-            IDictionary<string, string>? defaultReplacements
+            Func<string, string?>? defaultReplacements
         ) {
             var top = elementStack[0];
             var closestObject = elementStack.FirstOrDefault(x => x.Value.ValueKind == JsonValueKind.Object);
@@ -440,12 +433,11 @@ namespace Jaahas.Json {
                 }
 
                 // No match in the object stack: try and find a default replacement.
-                if (defaultReplacements != null && defaultReplacements.TryGetValue(pName, out var replacement)) {
-                    return replacement;
-                }
+                var replacement = defaultReplacements?.Invoke(pName);
 
-                // No replacement available.
-                return m.Value;
+                // Return the replacement if available, otherwise return the original placeholder
+                // text.
+                return replacement ?? m.Value;
             });
         }
 
