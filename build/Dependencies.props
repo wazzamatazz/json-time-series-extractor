@@ -4,7 +4,7 @@
 
   <!-- CoreFX Packages -->
   <PropertyGroup>
-    <SystemTextJsonVersion>5.0.2</SystemTextJsonVersion>
+    <SystemTextJsonVersion>6.0.1</SystemTextJsonVersion>
   </PropertyGroup>
   
   <!-- ASP.NET Core/Microsoft Extension Packages -->
@@ -13,13 +13,11 @@
   
   <!-- Dev/Test/Benchmark Packages -->
   <PropertyGroup>
-    <CoverletCollectorVersion>3.0.3</CoverletCollectorVersion>
-    <JaahasMSBuildExtensionsVersion>1.0.4</JaahasMSBuildExtensionsVersion>
-    <MicrosoftCodeAnalysisNetAnalyzersVersion>5.0.3</MicrosoftCodeAnalysisNetAnalyzersVersion>
-    <MicrosoftNETTestSdkVersion>16.10.0</MicrosoftNETTestSdkVersion>
-    <MicrosoftSourceLinkGitHubVersion>1.0.0</MicrosoftSourceLinkGitHubVersion>
-    <MSTestTestAdapterVersion>2.2.4</MSTestTestAdapterVersion>
-    <MSTestTestFrameworkVersion>2.2.4</MSTestTestFrameworkVersion>
+    <CoverletCollectorVersion>3.1.0</CoverletCollectorVersion>
+    <MicrosoftNETTestSdkVersion>17.0.0</MicrosoftNETTestSdkVersion>
+    <MicrosoftSourceLinkGitHubVersion>1.1.1</MicrosoftSourceLinkGitHubVersion>
+    <MSTestTestAdapterVersion>2.2.8</MSTestTestAdapterVersion>
+    <MSTestTestFrameworkVersion>2.2.8</MSTestTestFrameworkVersion>
   </PropertyGroup>
   
   <!-- Other Packages -->
