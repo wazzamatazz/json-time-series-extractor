@@ -112,7 +112,9 @@ namespace Jaahas.Json {
                 foreach (var val in GetSamplesCore(
                     elementStack,
                     sampleTime,
-                    options.Template,
+                    string.IsNullOrWhiteSpace(options.Template) 
+                        ? TimeSeriesExtractorOptions.DefaultTemplate 
+                        : options.Template,
                     options.GetTemplateReplacement,
                     handleProperty,
                     options.Recursive,

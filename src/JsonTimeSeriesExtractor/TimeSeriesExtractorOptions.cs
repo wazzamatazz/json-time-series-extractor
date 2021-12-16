@@ -28,6 +28,11 @@ namespace Jaahas.Json {
         /// The template to use when generating keys for extracted values.
         /// </summary>
         /// <remarks>
+        /// 
+        /// <para>
+        ///   If <see cref="Template"/> is <see langword="null"/> or white space, <see cref="DefaultTemplate"/> 
+        ///   will be used.
+        /// </para>
         ///   
         /// <para>
         ///   Templates can contain placholders, in the format <c>{property_name}</c>, where 
@@ -55,7 +60,9 @@ namespace Jaahas.Json {
         /// 
         /// <para>
         ///   Use the <see cref="IncludeProperty"/> delegate to ignore JSON properties that are 
-        ///   not required or are used only for metadata purposes.
+        ///   not required or are used only for metadata purposes, and the <see cref="GetTemplateReplacement"/> 
+        ///   delegate to define default replacement values for placeholders that are not found in 
+        ///   the JSON object.
         /// </para>
         /// 
         /// <para>

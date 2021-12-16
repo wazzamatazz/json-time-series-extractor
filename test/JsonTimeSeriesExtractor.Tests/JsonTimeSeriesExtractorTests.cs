@@ -42,6 +42,36 @@ namespace Jaahas.Json.Tests {
 
 
         [TestMethod]
+        public void ShouldUseDefaultTemplate() {
+            var deviceSample = new {
+                Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
+                SignalStrength = -75,
+                DataFormat = 5,
+                Temperature = 19.3,
+                Humidity = 37.905,
+                Pressure = 1013.35,
+                AccelerationX = -0.872,
+                AccelerationY = 0.512,
+                AccelerationZ = -0.04,
+                BatteryVoltage = 3.085,
+                TxPower = 4,
+                MovementCounter = 5,
+                MeasurementSequence = 34425,
+                MacAddress = "AB:CD:EF:01:23:45"
+            };
+
+            var json = JsonSerializer.Serialize(deviceSample);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() { 
+                Template = null! 
+            }).ToArray();
+
+            Assert.AreEqual(13, samples.Length);
+            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
+        }
+
+
+        [TestMethod]
         public void ShouldProcessKeyTemplate() {
             var deviceSample = new {
                 Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
