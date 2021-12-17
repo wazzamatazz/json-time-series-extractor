@@ -4,6 +4,8 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
+using Json.Pointer;
+
 namespace Jaahas.Json {
 
     /// <summary>
@@ -88,29 +90,29 @@ namespace Jaahas.Json {
         ///   The parsed tag values.
         /// </returns>
         private static IEnumerable<TimeSeriesSample> GetSamplesCore(JsonElement element, TimeSeriesExtractorOptions options) {
+            JsonPointer? tsPointer = null;
             DateTimeOffset sampleTime;
-
-            if (!TryGetTimestamp(element, options, out var timestampPropName, out sampleTime)) {
+            
+            if (options.TimestampProperty == null || !JsonPointer.TryParse(options.TimestampProperty, out tsPointer, JsonPointerKind.Plain) || !TryGetTimestamp(element, tsPointer!, options, out sampleTime)) {
                 sampleTime = options!.GetDefaultTimestamp?.Invoke() ?? DateTimeOffset.UtcNow;
             }
 
-            var elementStack = new Stack<KeyValuePair<string?, JsonElement>>();
-            // Push root object onto stack.
-            elementStack.Push(new KeyValuePair<string?, JsonElement>(null, element));
-
-            Func<KeyValuePair<string?, JsonElement>[], bool>? handleProperty = options!.IncludeProperty == null
-                ? timestampPropName == null
+            Func<JsonPointer, bool>? handleProperty = options.IncludeProperty == null
+                ? tsPointer == null
                     ? null
-                    : (stack) => !string.Equals(stack[0].Key, timestampPropName, StringComparison.Ordinal)
-                : timestampPropName == null
-                    ? options.IncludeProperty
-                    : (stack) => !string.Equals(stack[0].Key, timestampPropName, StringComparison.Ordinal) && options.IncludeProperty.Invoke(stack);
+                    : path => !path.Equals(tsPointer)
+                : tsPointer == null
+                    ? path => options.IncludeProperty.Invoke(path.ToString())
+                    : path => !path.Equals(tsPointer) && options.IncludeProperty.Invoke(path.ToString());
+
+            var pointerSegments = new Stack<KeyValuePair<string?, JsonElement>>();
+            pointerSegments.Push(new KeyValuePair<string?, JsonElement>(null, element));
 
             foreach (var prop in element.EnumerateObject()) {
-                elementStack.Push(new KeyValuePair<string?, JsonElement>(prop.Name, prop.Value));
+                pointerSegments.Push(new KeyValuePair<string?, JsonElement>(prop.Name, prop.Value));
 
                 foreach (var val in GetSamplesCore(
-                    elementStack,
+                    pointerSegments,
                     sampleTime,
                     string.IsNullOrWhiteSpace(options.Template) 
                         ? TimeSeriesExtractorOptions.DefaultTemplate 
@@ -125,7 +127,7 @@ namespace Jaahas.Json {
                     yield return val;
                 }
 
-                elementStack.Pop();
+                pointerSegments.Pop();
             }
         }
 
@@ -169,22 +171,17 @@ namespace Jaahas.Json {
             DateTimeOffset sampleTime,
             string sampleKeyTemplate,
             Func<string, string?>? templateReplacements,
-            Func<KeyValuePair<string?, JsonElement>[], bool>? includeProperty,
+            Func<JsonPointer, bool>? includeProperty,
             bool recursive,
             int maxRecursionDepth,
             int currentRecursionDepth,
             string? pathSeparator
         ) {
-            KeyValuePair<string?, JsonElement>[]? elementStackArray = null;
-
-            KeyValuePair<string?, JsonElement>[] BuildElementStackArray() {
-                elementStackArray ??= elementStack.ToArray();
-                return elementStackArray;
-            }
+            var pointer = JsonPointer.Create(elementStack.Where(x => x.Key != null).Reverse().Select(x => PointerSegment.Create(x.Key!)), false);
 
             if (includeProperty != null) {
                 // Check if this property should be included.
-                if (!includeProperty.Invoke(BuildElementStackArray())) {
+                if (!includeProperty.Invoke(pointer)) {
                     yield break;
                 }
             }
@@ -197,7 +194,8 @@ namespace Jaahas.Json {
                 // maximum recursion depth, the value will be the serialized JSON of the element
                 // if the element is an object or an array.
                 var tagName = BuildSampleKeyFromTemplate(
-                    BuildElementStackArray(),
+                    pointer.ToString(),
+                    elementStack,
                     recursive,
                     pathSeparator!,
                     sampleKeyTemplate,
@@ -269,7 +267,8 @@ namespace Jaahas.Json {
                         }
 
                         var key = BuildSampleKeyFromTemplate(
-                            BuildElementStackArray(),
+                            pointer.ToString(),
+                            elementStack,
                             recursive,
                             pathSeparator!,
                             sampleKeyTemplate, 
@@ -289,11 +288,11 @@ namespace Jaahas.Json {
         /// <param name="element">
         ///   The JSON object.
         /// </param>
+        /// <param name="pointer">
+        ///   The pointer to the timestamp property.
+        /// </param>
         /// <param name="options">
         ///   The extraction options.
-        /// </param>
-        /// <param name="name">
-        ///   The name of the property that was identified as the timestamp property.
         /// </param>
         /// <param name="value">
         ///   The timestamp that was extracted.
@@ -302,52 +301,36 @@ namespace Jaahas.Json {
         ///   <see langword="true"/> if the timestamp was successfully extracted, or 
         ///   <see langword="false"/> otherwise.
         /// </returns>
-        private static bool TryGetTimestamp(JsonElement element, TimeSeriesExtractorOptions options, out string? name, out DateTimeOffset value) {
-            name = null;
+        private static bool TryGetTimestamp(JsonElement element, JsonPointer pointer, TimeSeriesExtractorOptions options, out DateTimeOffset value) {
             value = default;
 
-            if (element.ValueKind != JsonValueKind.Object) {
+            if (element.ValueKind != JsonValueKind.Object || options.TimestampProperty == null) {
                 return false;
             }
 
-            if (options.IsTimestampProperty != null) {
-                
-                
+            var el = pointer.Evaluate(element);
+            if (el == null) {
                 return false;
             }
 
-            foreach (var prop in element.EnumerateObject()) {
-                if (options.IsTimestampProperty != null) {
-                    if (!options.IsTimestampProperty.Invoke(prop.Name)) {
-                        continue;
-                    }
-
-                    name = prop.Name;
-                    value = prop.Value.GetDateTimeOffset();
-                    return true;
-                }
-                else {
-                    if (!string.Equals(prop.Name, "time", StringComparison.OrdinalIgnoreCase) && !string.Equals(prop.Name, "timestamp", StringComparison.OrdinalIgnoreCase)) {
-                        continue;
-                    }
-
-                    if (!prop.Value.TryGetDateTimeOffset(out var dt)) {
-                        continue;
-                    }
-
-                    name = prop.Name;
-                    value = dt;
-                    return true;
-                }
+            if (!el.Value.TryGetDateTimeOffset(out var dt)) {
+                // Not a timestamp. It might be ms since 01/01/1970 UTC.
+                dt = el.Value.TryGetInt64(out var ms)
+                    ? new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(ms)
+                    : default;
             }
 
-            return false;
+            value = dt;
+            return true;
         }
 
 
         /// <summary>
         /// Builds a key for a <see cref="TimeSeriesSample"/> from the specified template.
         /// </summary>
+        /// <param name="pointer">
+        ///   The JSON pointer for the element that is currently being processed.
+        /// </param>
         /// <param name="elementStack">
         ///   The stack of objects with the current object being processed at the top and the root 
         ///   object in the hierarchy at the bottom.
@@ -372,30 +355,32 @@ namespace Jaahas.Json {
         ///   The generated key.
         /// </returns>
         private static string BuildSampleKeyFromTemplate(
-            KeyValuePair<string?, JsonElement>[] elementStack, 
-            bool recursive, 
-            string pathSeparator, 
-            string template, 
+            string pointer,
+            IEnumerable<KeyValuePair<string?, JsonElement>> elementStack,
+            bool recursive,
+            string pathSeparator,
+            string template,
             Func<string, string?>? defaultReplacements
         ) {
-            var top = elementStack[0];
             var closestObject = elementStack.FirstOrDefault(x => x.Value.ValueKind == JsonValueKind.Object);
 
-            var elementStackInHierarchyOrder = recursive
-                ? elementStack.Reverse().ToArray()
-                : Array.Empty<KeyValuePair<string?, JsonElement>>();
+            KeyValuePair<string?, JsonElement>[] elementStackInHierarchyOrder = null!;
+
+            KeyValuePair<string?, JsonElement>[] GetElementStackInHierarchyOrder() {
+                elementStackInHierarchyOrder ??= recursive
+                    ? elementStack.Reverse().ToArray()
+                    : Array.Empty<KeyValuePair<string?, JsonElement>>();
+                return elementStackInHierarchyOrder;
+            }
 
             string? GetFullPropertyName(bool forceLocalName = false) {
                 if (!recursive || forceLocalName) {
-                    return top.Key;
+                    return pointer.Substring(pointer.LastIndexOf('/') + 1);
                 }
 
-                var fullName = string.Join(pathSeparator, elementStackInHierarchyOrder.Where(x => x.Key != null).Select(x => x.Key));
-                if (string.IsNullOrEmpty(fullName)) {
-                    return null;
-                }
-
-                return fullName;
+                return string.Equals(pathSeparator, TimeSeriesExtractorOptions.DefaultPathSeparator, StringComparison.Ordinal)
+                    ? pointer.TrimStart('/')
+                    : pointer.TrimStart('/').Replace("/", pathSeparator);
             }
 
             return s_tagNameTemplateMatcher.Replace(template, m => {
@@ -411,7 +396,7 @@ namespace Jaahas.Json {
 
                     var propVals = new List<string>();
                     
-                    foreach (var obj in elementStackInHierarchyOrder) {
+                    foreach (var obj in GetElementStackInHierarchyOrder()) {
                         if (obj.Value.ValueKind != JsonValueKind.Object) {
                             continue;
                         }

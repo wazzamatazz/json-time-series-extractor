@@ -36,33 +36,31 @@ Properties on the JSON objects are converted to instances of [TimeSeriesSample](
 
 ## Selecting the Timestamp
 
-By default, `TimeSeriesExtractor` will try and use a property on your object named `time` or `timestamp` to extract the timestamp for each sample. The property name check is case-insensitive. If a timestamp cannot be extracted, the delegate assigned to the `GetDefaultTimestamp` property on the `TimeSeriesExtractorOptions` is called. If no delegate has been specified, `DateTimeOffset.UtcNow` is used.
-
-Alternatively, you can assign a delegate to the `IsTimestampProperty` on `TimeSeriesExtractorOptions` to select the timestamp property manually:
+The `TimestampProperty` on `TimeSeriesExtractorOptions` defines the JSON Pointer path that is used to retrieve the timestamp for the samples extrcated from the JSON object. By default, this property is set to `/time`, but can overridden if required:
 
 ```csharp
 new TimeSeriesExtractorOptions() {
-  IsTimestampProperty = prop => prop.Equals("sampleTime")
+  TimestampProperty = "/metadata/utcSampleTime"
 }
 ```
+
+If the `TimestampProperty` is `null`, or does not exist in the document, the delegate assigned to the `GetDefaultTimestamp` property on the `TimeSeriesExtractorOptions` is called to request a fallback timestamp to use. If no delegate has been specified, `DateTimeOffset.UtcNow` is used.
 
 
 ## Selecting the Properties to Handle
 
-By default, `TimeSeriesExtractor` will create a sample for each property on the object except for the timestamp property. To customise if a property will be included or excluded, you can assign a delegate to the `IncludeProperty` property on the `TimeSeriesExtractorOptions` instance passed to the extractor. The delegate will receive a `KeyValuePair<string?, JsonElement>[]` array, representing the bottom-up list of JSON property names and elements that have been visited to reach the current property (i.e. the entry at index 0 in the array). 
-
-The array is guaranteed to have at least two items; the final `KeyValuePair<string?, JsonElement>` in the array will always have a key of `null` and a `JsonElement` value that represents the root JSON object that is being processed.
+By default, `TimeSeriesExtractor` will create a sample for each property on the object except for the configured timestamp property. To customise if a property will be included or excluded, you can assign a delegate to the `IncludeProperty` property on the `TimeSeriesExtractorOptions` instance passed to the extractor. The delegate receives a string that contains the JSON Pointer path to the property, and returns a Boolean value indicating if the property should be handled or not.
 
 For example:
 
 ```csharp
 new TimeSeriesExtractorOptions() {
-  IncludeProperty = props => {
+  IncludeProperty = prop => {
     // Check if the current property is allowed
-    switch (props[0].Key) {
-      case "temperature":
-      case "pressure":
-      case "humidity":
+    switch (prop) {
+      case "/temperature":
+      case "/pressure":
+      case "/humidity":
         return true;
       default:
         return false;
@@ -80,7 +78,7 @@ Each `TimeSeriesSample` has a `Key` property that is used to identify the JSON p
 devices/{deviceId}/instruments/{$prop}
 ```
 
-The parts of the template enclosed in `{` and `}` are placeholders that will be replaced at runtime; `{deviceId}` will be replaced with the value of the property named `deviceId` on the same object as the property being processed, and `{$prop}` will be replaced with the name of the property itself.
+The parts of the template enclosed in `{` and `}` are placeholders that will be replaced at runtime; `{deviceId}` will be replaced with the value of the property named `deviceId` on the same object as the property being processed, and `{$prop}` will be replaced with the JSON Pointer path of the property itself, without the leading `/`.
 
 Here is an example JSON document:
 
@@ -93,7 +91,7 @@ Here is an example JSON document:
 
 When processing the `temperature` property on the JSON object using the template above, the key that would be generated would be `devices/7/instruments/temperature`.
 
-The default key template if one is not specified is simply `{prop$}` (i.e. the property name).
+The default key template if one is not specified is simply `{prop$}` (i.e. the JSON Pointer path to the property).
 
 
 ### Default Placeholder Values
@@ -151,7 +149,7 @@ The default behaviour of `TimeSeriesExtractor` would be to emit 3 samples, despi
 - `pressure`: `1020.99`
 - `acceleration`: `"{ \"x\": -0.876, \"y\": 0.516, \"z\": -0.044 }"`
 
-In this circumstance, it is desirable to recursively process the nested object and emit a sample for each of the sub-properties. This can be done by setting the `Recursive` property on `TimeSeriesExtractorOptions` to `true`. When recursive mode is enabled, the `{$prop}` replacement in the key template consists of a delimited list of all of the property names that were traversed from the root object to current property. The `PathSeparator` property on `TimeSeriesExtractorOptions` defines the delimeter to use (default: `/`).
+In this circumstance, it is desirable to recursively process the nested object and emit a sample for each of the sub-properties. This can be done by setting the `Recursive` property on `TimeSeriesExtractorOptions` to `true`. If the `PathSeparator` property on `TimeSeriesExtractorOptions` is configured to anything other than `/`, the path delimiters in the `{$prop}` substitution value will be replaced with the specified `PathSeparator`.
 
 With recursive mode enabled, the same JSON above would result in 5 samples being emitted:
 
@@ -161,7 +159,7 @@ With recursive mode enabled, the same JSON above would result in 5 samples being
 - `acceleration/y`: `0.516`
 - `acceleration/z`: `-0.044`
 
-When recursive mode is enabled, the extractor will also iterate over nested arrays. The array index will be used as the local property name when replacing the `{$prop}` template replacement. For example:
+When recursive mode is enabled, the extractor will also iterate over nested arrays. For example:
 
 ```json
 {
@@ -182,7 +180,7 @@ The samples emitted would be:
 
 ### A Note on Recursive Mode Template Replacements
 
-In recursive mode, template replacements are resolved using all objects in the hierarchy from the root to the current object, and the matches are concatenated together with the configured path separator. Consider the following JSON:
+In recursive mode, template replacements other than `{$prop}` and `{$prop-local}` (see below) are resolved using all objects in the hierarchy from the root to the current object, and the matches are concatenated together with the configured path separator. Consider the following JSON:
 
 ```json
 {
@@ -196,9 +194,9 @@ In recursive mode, template replacements are resolved using all objects in the h
 
 Given a template of `{location}/{$prop}`, the key generated for the nested `temperature` property would be `System A/Subsystem 1/measurements/temperature`.
 
-If you do not want to include the document path in the generated key (i.e. the `measurements/` part in the above example), you can specify `{$prop-local}` in the template instead of `{$prop}`.
+If you want to use the local property name in the generated key instead of the full JSON Pointer path, you can specify `{$prop-local}` in the template instead of `{$prop}`.
 
-Using the above example JSON and a template of `{location}/{$prop-local}`, the key for the nested `temperature` property would be `System A/Subsystem 1/temperature`.
+Using the above example JSON and a template of `{location}/{$prop-local}`, the key for the nested `temperature` property would be `System A/Subsystem 1/temperature` instead of `System A/Subsystem 1/measurements/temperature`.
 
 > When recursive mode is disabled, the `{$prop}` and `${prop-local}` template placeholders are functionally identical.
 

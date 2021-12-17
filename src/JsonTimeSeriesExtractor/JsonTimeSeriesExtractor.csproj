@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="System.Text.Json" Version="$(SystemTextJsonVersion)" />
+    <PackageReference Include="JsonPointer.Net" Version="$(JsonPointerNetVersion)" />
   </ItemGroup>
 
 </Project>

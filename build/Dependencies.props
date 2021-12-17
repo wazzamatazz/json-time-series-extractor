@@ -22,6 +22,7 @@
   
   <!-- Other Packages -->
   <PropertyGroup>
+    <JsonPointerNetVersion>2.1.0</JsonPointerNetVersion>
   </PropertyGroup>
   
 </Project>

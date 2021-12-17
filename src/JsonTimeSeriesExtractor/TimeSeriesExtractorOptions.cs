@@ -15,6 +15,11 @@ namespace Jaahas.Json {
         public const string DefaultTemplate = "{$prop}";
 
         /// <summary>
+        /// Default <see cref="TimestampProperty"/> value.
+        /// </summary>
+        public const string DefaultTimestampProperty = "/time";
+
+        /// <summary>
         /// Default <see cref="PathSeparator"/> value.
         /// </summary>
         public const string DefaultPathSeparator = "/";
@@ -37,8 +42,8 @@ namespace Jaahas.Json {
         /// <para>
         ///   Templates can contain placholders, in the format <c>{property_name}</c>, where 
         ///   <c>property_name</c> is the name of a property on the JSON object that is being 
-        ///   processed. The placeholder for the current property name being processed is 
-        ///   <c>{$prop}</c>.
+        ///   processed. The placeholder for the JSON Pointer path of the property being processed 
+        ///   (without the leading <c>/</c>) is <c>{$prop}</c>.
         /// </para>
         /// 
         /// <para>
@@ -84,37 +89,16 @@ namespace Jaahas.Json {
         public Func<string, string?>? GetTemplateReplacement { get; set; }
 
         /// <summary>
-        /// A delegate used to identify the property name that contains the timestamp to use for 
-        /// the extracted samples.
+        /// The JSON Pointer path to the property that defines the timestamp for the samples 
+        /// extracted from the JSON.
         /// </summary>
         /// <remarks>
-        /// 
-        /// <para>
-        ///   If no <see cref="IsTimestampProperty"/> delegate is specified, the extractor will 
-        ///   perform a case-insensitive match against the following property names (in order):
-        /// </para>
-        /// 
-        /// <list type="bullet">
-        ///   <item>
-        ///     <description><c>time</c></description>
-        ///   </item>
-        ///   <item>
-        ///     <description><c>timestamp</c></description>
-        ///   </item>
-        /// </list>
-        /// 
-        /// <para>
-        ///   If a match is found and the property value can be converted to a <see cref="DateTimeOffset"/>, 
-        ///   the property will be used.
-        /// </para>
-        /// 
-        /// <para>
-        ///   If no timestamp property can be found, <see cref="GetDefaultTimestamp"/> will be 
-        ///   used as the sample time.
-        /// </para>
-        /// 
+        ///   If <see cref="TimestampProperty"/> is <see langword="null"/>, the configured 
+        ///   timestamp property can not be found in the JSON document, or the property does not 
+        ///   represent a <see cref="DateTimeOffset"/> value, <see cref="GetDefaultTimestamp"/> 
+        ///   will be used the retrieve the sample time.
         /// </remarks>
-        public Func<string, bool>? IsTimestampProperty { get; set; }
+        public string? TimestampProperty { get; set; } = DefaultTimestampProperty;
 
         /// <summary>
         /// A delegate that will retrieve the default sample timestamp to use if a timestamp 
@@ -128,17 +112,12 @@ namespace Jaahas.Json {
 
         /// <summary>
         /// A delegate that is used to determine if a sample should be emitted for a given 
-        /// property name.
+        /// JSON property.
         /// </summary>
         /// <remarks>
         /// 
         /// <para>
-        ///   The parameter passed to the delegate is an array of <see cref="KeyValuePair{String, JsonElement}"/> 
-        ///   that represents the JSON property names and elements that have been visited to reach 
-        ///   the property that is currently being processed, with the entry for the current 
-        ///   property first on the list, and the entry for the property on the root object last. 
-        ///   The entry for the root object in the document will always have a <see langword="null"/> 
-        ///   <see cref="KeyValuePair{String, JsonElement}.Key"/> value.
+        ///   The parameter passed to the delegate is the JSON pointer path for the property.
         /// </para>
         /// 
         /// <para>
@@ -148,7 +127,7 @@ namespace Jaahas.Json {
         /// </para>
         /// 
         /// </remarks>
-        public Func<KeyValuePair<string?, JsonElement>[], bool>? IncludeProperty { get; set; } = null;
+        public Func<string, bool>? IncludeProperty { get; set; }
 
         /// <summary>
         /// When <see langword="true"/>, JSON properties that contain other objects or arrays will 
@@ -178,7 +157,8 @@ namespace Jaahas.Json {
         /// <para>
         ///   Given a key template of <c>devices/{deviceId}/{$prop}</c>, <see cref="IncludeProperty"/> 
         ///   configured to skip <c>deviceId</c>, recursive processing enabled, and a path 
-        ///   separator of <c>/</c>, values for the following keys will be emitted:
+        ///   separator of <c>/</c>, values for the following keys under the <c>measurements</c> 
+        ///   property will be emitted:
         /// </para>
         /// 
         /// <list type="bullet">
@@ -227,13 +207,13 @@ namespace Jaahas.Json {
         /// <list type="bullet">
         ///   <item>
         ///     <description>
-        ///       When a template includes a reference to another property (e.g. <c>deviceId</c> in <c>{deviceId}/{$prop}</c>), 
-        ///       all instances of that property from the root object to the current element will 
-        ///       be used in the replacement, using the <see cref="PathSeparator"/> to join them 
-        ///       together. For example, if a parent object has a <c>deviceId</c> of <c>1</c> and 
-        ///       a child object has a <c>deviceId</c> of <c>A</c>, the <c>{deviceId}</c> placeholder 
-        ///       in the key template will be replaced with <c>1/A</c> when it is applied to a 
-        ///       property on the child object.
+        ///       When a template includes a reference to another property (e.g. <c>deviceId</c> in 
+        ///       <c>{deviceId}/{$prop}</c>), all instances of that property from the root object 
+        ///       to the current element will be used in the replacement, using the <see cref="PathSeparator"/> 
+        ///       to join them together. For example, if a parent object has a <c>deviceId</c> of 
+        ///       <c>1</c> and a child object has a <c>deviceId</c> of <c>A</c>, the <c>{deviceId}</c> 
+        ///       placeholder in the key template will be replaced with <c>1/A</c> when it is applied 
+        ///       to a property on the child object.
         ///     </description>
         ///   </item>
         ///   <item>
@@ -295,11 +275,11 @@ namespace Jaahas.Json {
             GetDefaultTimestamp = existing.GetDefaultTimestamp;
             GetTemplateReplacement = existing.GetTemplateReplacement;
             IncludeProperty = existing.IncludeProperty;
-            IsTimestampProperty = existing.IsTimestampProperty;
             MaxDepth = existing.MaxDepth;
             PathSeparator = existing.PathSeparator;
             Recursive = existing.Recursive;
             Template = existing.Template;
+            TimestampProperty = existing.TimestampProperty;
         }
 
     }

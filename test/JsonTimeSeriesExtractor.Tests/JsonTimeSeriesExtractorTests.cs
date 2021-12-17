@@ -34,7 +34,9 @@ namespace Jaahas.Json.Tests {
 
             var json = JsonSerializer.Serialize(deviceSample);
 
-            var samples = TimeSeriesExtractor.GetSamples(json).ToArray();
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                TimestampProperty = "/" + nameof(deviceSample.Timestamp)
+            }).ToArray();
 
             Assert.AreEqual(13, samples.Length);
             Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
@@ -63,7 +65,8 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() { 
-                Template = null! 
+                Template = null!,
+                TimestampProperty = "/" + nameof(deviceSample.Timestamp)
             }).ToArray();
 
             Assert.AreEqual(13, samples.Length);
@@ -93,7 +96,8 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.TestName + "/{MacAddress}/{$prop}"
+                Template = TestContext.TestName + "/{MacAddress}/{$prop}",
+                TimestampProperty = "/" + nameof(deviceSample.Timestamp),
             }).ToArray();
 
             Assert.AreEqual(13, samples.Length);
@@ -126,6 +130,7 @@ namespace Jaahas.Json.Tests {
             var guid = Guid.NewGuid();
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Template = TestContext.TestName + "/{MacAddress}/{Uuid}/{$prop}",
+                TimestampProperty = "/" + nameof(deviceSample.Timestamp),
                 GetTemplateReplacement = text => { 
                     switch (text.ToUpperInvariant()) {
                         case "UUID":
@@ -165,11 +170,12 @@ namespace Jaahas.Json.Tests {
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Template = TestContext.TestName + "/{MacAddress}/{DataFormat}/{$prop}",
+                TimestampProperty = "/" + nameof(deviceSample.Timestamp),
                 IncludeProperty = prop => { 
-                    if (prop[0].Key!.Equals(nameof(deviceSample.DataFormat))) {
+                    if (prop.Equals("/" + nameof(deviceSample.DataFormat))) {
                         return false;
                     }
-                    if (prop[0].Key!.Equals(nameof(deviceSample.MacAddress))) {
+                    if (prop.Equals("/" + nameof(deviceSample.MacAddress))) {
                         return false;
                     }
                     return true;
@@ -205,14 +211,15 @@ namespace Jaahas.Json.Tests {
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Template = TestContext.TestName + "/{MacAddress}/{DataFormat}/{$prop}",
+                TimestampProperty = "/" + nameof(deviceSample.Timestamp),
                 IncludeProperty = prop => {
-                    if (prop[0].Key!.Equals(nameof(deviceSample.Temperature))) {
+                    if (prop.Equals("/" + nameof(deviceSample.Temperature))) {
                         return true;
                     }
-                    if (prop[0].Key!.Equals(nameof(deviceSample.Humidity))) {
+                    if (prop.Equals("/" + nameof(deviceSample.Humidity))) {
                         return true;
                     }
-                    if (prop[0].Key!.Equals(nameof(deviceSample.Pressure))) {
+                    if (prop.Equals("/" + nameof(deviceSample.Pressure))) {
                         return true;
                     }
                     return false;
@@ -289,6 +296,7 @@ namespace Jaahas.Json.Tests {
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Template = TestContext.TestName + "/{$prop}",
+                TimestampProperty = "/" + nameof(deviceSample.Timestamp),
                 Recursive = true
             }).ToArray();
 
@@ -313,7 +321,7 @@ namespace Jaahas.Json.Tests {
                 Template = "{location}/{$prop}",
                 PathSeparator = "/",
                 Recursive = true,
-                IncludeProperty = prop => !prop[0].Key!.Equals("location")
+                IncludeProperty = prop => !prop.EndsWith("/location")
             }).ToArray();
 
             Assert.AreEqual(1, samples.Length);
@@ -337,7 +345,7 @@ namespace Jaahas.Json.Tests {
                 Template = "{location}/{$prop-local}",
                 PathSeparator = "/",
                 Recursive = true,
-                IncludeProperty = prop => !prop[0].Key!.Equals("location")
+                IncludeProperty = prop => !prop.EndsWith("/location")
             }).ToArray();
 
             Assert.AreEqual(1, samples.Length);
