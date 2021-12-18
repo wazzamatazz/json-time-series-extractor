@@ -12,7 +12,7 @@ namespace Jaahas.Json {
         /// <summary>
         /// Default <see cref="Template"/> value.
         /// </summary>
-        public const string DefaultTemplate = "{$prop}";
+        public const string DefaultTemplate = TimeSeriesExtractor.FullPropertyNamePlaceholder;
 
         /// <summary>
         /// Default <see cref="TimestampProperty"/> value.

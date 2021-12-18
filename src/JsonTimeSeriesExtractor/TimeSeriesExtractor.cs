@@ -15,6 +15,16 @@ namespace Jaahas.Json {
     public class TimeSeriesExtractor {
 
         /// <summary>
+        /// Template placeholder for the full JSON Pointer path to a property.
+        /// </summary>
+        public const string FullPropertyNamePlaceholder = "{$prop}";
+
+        /// <summary>
+        /// Template placeholder for the local property name only.
+        /// </summary>
+        public const string LocalPropertyNamePlaceholder = "{$prop-local}";
+
+        /// <summary>
         /// Matches JSON property name references in sample key templates.
         /// </summary>
         private static readonly Regex s_tagNameTemplateMatcher = new Regex(@"\{(?<property>[^\}]+?)\}", RegexOptions.Singleline);
@@ -108,15 +118,27 @@ namespace Jaahas.Json {
             var pointerSegments = new Stack<KeyValuePair<string?, JsonElement>>();
             pointerSegments.Push(new KeyValuePair<string?, JsonElement>(null, element));
 
+            var template = string.IsNullOrWhiteSpace(options.Template)
+                ? TimeSeriesExtractorOptions.DefaultTemplate
+                : options.Template;
+
+            // We are using the default template if:
+            //
+            // 1. We are running in recursive mode and the template is equal to FullPropertyNamePlaceholder.
+            // 2. We are running in non-recursive mode and the template is equal to FullPropertyNamePlaceholder
+            //    or LocalPropertyNamePlaceholder. 
+            var isDefaultTemplate = options.Recursive 
+                ? string.Equals(template, FullPropertyNamePlaceholder, StringComparison.Ordinal)
+                : string.Equals(template, FullPropertyNamePlaceholder, StringComparison.Ordinal) || string.Equals(template, LocalPropertyNamePlaceholder, StringComparison.Ordinal);
+
             foreach (var prop in element.EnumerateObject()) {
                 pointerSegments.Push(new KeyValuePair<string?, JsonElement>(prop.Name, prop.Value));
 
                 foreach (var val in GetSamplesCore(
                     pointerSegments,
                     sampleTime,
-                    string.IsNullOrWhiteSpace(options.Template) 
-                        ? TimeSeriesExtractorOptions.DefaultTemplate 
-                        : options.Template,
+                    template,
+                    isDefaultTemplate,
                     options.GetTemplateReplacement,
                     handleProperty,
                     options.Recursive,
@@ -142,11 +164,14 @@ namespace Jaahas.Json {
         /// <param name="sampleTime">
         ///   The timestamp to use for extracted tag values.
         /// </param>
-        /// <param name="sampleKeyTemplate">
-        ///   The sample key template to use for the generated values.
+        /// <param name="template">
+        ///   The template to use when generating the key for a given value.
+        /// </param>
+        /// <param name="isDefaultTemplate">
+        ///   Specifies if <paramref name="template"/> is equal to <see cref="TimeSeriesExtractorOptions.DefaultTemplate"/>.
         /// </param>
         /// <param name="templateReplacements">
-        ///   A callback for retrieving the default replacements for <paramref name="sampleKeyTemplate"/>.
+        ///   A callback for retrieving the default replacements for <paramref name="template"/>.
         /// </param>
         /// <param name="includeProperty">
         ///   A delegate that will check if a given property name should be included.
@@ -169,7 +194,8 @@ namespace Jaahas.Json {
         private static IEnumerable<TimeSeriesSample> GetSamplesCore(
             Stack<KeyValuePair<string?, JsonElement>> elementStack,
             DateTimeOffset sampleTime,
-            string sampleKeyTemplate,
+            string template,
+            bool isDefaultTemplate,
             Func<string, string?>? templateReplacements,
             Func<JsonPointer, bool>? includeProperty,
             bool recursive,
@@ -198,7 +224,8 @@ namespace Jaahas.Json {
                     elementStack,
                     recursive,
                     pathSeparator!,
-                    sampleKeyTemplate,
+                    template,
+                    isDefaultTemplate,
                     templateReplacements
                 );
                 yield return BuildSampleFromJsonValue(sampleTime, tagName, currentElement.Value);
@@ -221,7 +248,8 @@ namespace Jaahas.Json {
                                 foreach (var val in GetSamplesCore(
                                     elementStack,
                                     sampleTime,
-                                    sampleKeyTemplate,
+                                    template,
+                                    isDefaultTemplate,
                                     templateReplacements,
                                     includeProperty,
                                     recursive,
@@ -245,7 +273,8 @@ namespace Jaahas.Json {
                                 foreach (var val in GetSamplesCore(
                                     elementStack,
                                     sampleTime,
-                                    sampleKeyTemplate,
+                                    template,
+                                    isDefaultTemplate,
                                     templateReplacements,
                                     includeProperty,
                                     recursive,
@@ -271,7 +300,8 @@ namespace Jaahas.Json {
                             elementStack,
                             recursive,
                             pathSeparator!,
-                            sampleKeyTemplate, 
+                            template, 
+                            isDefaultTemplate,
                             templateReplacements
                         );
 
@@ -347,6 +377,9 @@ namespace Jaahas.Json {
         /// <param name="template">
         ///   The sample key template.
         /// </param>
+        /// <param name="isDefaultTemplate">
+        ///   Specifies if <paramref name="template"/> is equal to <see cref="TimeSeriesExtractorOptions.DefaultTemplate"/>.
+        /// </param>
         /// <param name="defaultReplacements">
         ///   The default placeholder replacement values to use, if a referenced property does not 
         ///   exist on <paramref name="parentObject"/>.
@@ -360,8 +393,24 @@ namespace Jaahas.Json {
             bool recursive,
             string pathSeparator,
             string template,
+            bool isDefaultTemplate,
             Func<string, string?>? defaultReplacements
         ) {
+            string GetFullPropertyName(bool forceLocalName = false) {
+                if (!recursive || forceLocalName) {
+                    return pointer.Substring(pointer.LastIndexOf('/') + 1);
+                }
+
+                return string.Equals(pathSeparator, TimeSeriesExtractorOptions.DefaultPathSeparator, StringComparison.Ordinal)
+                    ? pointer.TrimStart('/')
+                    : pointer.TrimStart('/').Replace("/", pathSeparator);
+            }
+
+            if (isDefaultTemplate) {
+                // Fast path for default template.
+                return GetFullPropertyName();
+            }
+
             var closestObject = elementStack.FirstOrDefault(x => x.Value.ValueKind == JsonValueKind.Object);
 
             KeyValuePair<string?, JsonElement>[] elementStackInHierarchyOrder = null!;
@@ -371,16 +420,6 @@ namespace Jaahas.Json {
                     ? elementStack.Reverse().ToArray()
                     : Array.Empty<KeyValuePair<string?, JsonElement>>();
                 return elementStackInHierarchyOrder;
-            }
-
-            string? GetFullPropertyName(bool forceLocalName = false) {
-                if (!recursive || forceLocalName) {
-                    return pointer.Substring(pointer.LastIndexOf('/') + 1);
-                }
-
-                return string.Equals(pathSeparator, TimeSeriesExtractorOptions.DefaultPathSeparator, StringComparison.Ordinal)
-                    ? pointer.TrimStart('/')
-                    : pointer.TrimStart('/').Replace("/", pathSeparator);
             }
 
             return s_tagNameTemplateMatcher.Replace(template, m => {
