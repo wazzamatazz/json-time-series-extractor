@@ -127,6 +127,11 @@ new TimeSeriesExtractorOptions() {
 When processing the `temperature` property on the JSON object using the template above, the key that would be generated would be `devices/A-001/instruments/temperature`.
 
 
+### Handling Unresolved Template Replacements
+
+By default, unresolved template replacements are ignored; the final key will contain the placeholder text. To skip JSON properties when one or more template replacements cannot be fulfilled, set the `AllowUnresolvedTemplateReplacements` property on the `TimeSeriesExtractorOptions` object to `false`.
+
+
 ## Recursive Processing
 
 The default behaviour of `TimeSeriesExtractor` is to process top-level properties on the specified JSON object only. For example, consider the following JSON:
