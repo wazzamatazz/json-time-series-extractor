@@ -399,5 +399,40 @@ namespace Jaahas.Json.Tests {
             Assert.AreEqual(fallbackTimestamp, samples[0].Timestamp);
         }
 
+
+        [TestMethod]
+        public void ShouldAllowUnresolvedTemplateReplacements() {
+            var testObject = new {
+                value = 99
+            };
+
+            string json = JsonSerializer.Serialize(testObject);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() { 
+                Template = TestContext.TestName + "/{deviceId}/{$prop}",
+                AllowUnresolvedTemplateReplacements = true
+            }).ToArray();
+
+            Assert.AreEqual(1, samples.Length);
+            Assert.AreEqual(TestContext.TestName + "/{deviceId}/value", samples[0].Key);
+        }
+
+
+        [TestMethod]
+        public void ShouldNotAllowUnresolvedTemplateReplacements() {
+            var testObject = new {
+                value = 99
+            };
+
+            string json = JsonSerializer.Serialize(testObject);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                Template = TestContext.TestName + "/{deviceId}/{$prop}",
+                AllowUnresolvedTemplateReplacements = false
+            }).ToArray();
+
+            Assert.AreEqual(0, samples.Length);
+        }
+
     }
 }

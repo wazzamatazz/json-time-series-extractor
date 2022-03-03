@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text.Json;
 
 namespace Jaahas.Json {
 
@@ -87,6 +85,13 @@ namespace Jaahas.Json {
         ///   be identified from the JSON that is being parsed.
         /// </remarks>
         public Func<string, string?>? GetTemplateReplacement { get; set; }
+
+        /// <summary>
+        /// Specifies if the <see cref="TimeSeriesExtractor"/> will emit a value for a JSON 
+        /// property even if it cannot find replacement values for all placeholders in the 
+        /// <see cref="Template"/>.
+        /// </summary>
+        public bool AllowUnresolvedTemplateReplacements { get; set; } = true;
 
         /// <summary>
         /// The JSON Pointer path to the property that defines the timestamp for the samples 

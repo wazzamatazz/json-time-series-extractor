@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -140,6 +141,7 @@ namespace Jaahas.Json {
                     template,
                     isDefaultTemplate,
                     options.GetTemplateReplacement,
+                    options.AllowUnresolvedTemplateReplacements,
                     handleProperty,
                     options.Recursive,
                     options.MaxDepth,
@@ -173,6 +175,10 @@ namespace Jaahas.Json {
         /// <param name="templateReplacements">
         ///   A callback for retrieving the default replacements for <paramref name="template"/>.
         /// </param>
+        /// <param name="allowUnresolvedTemplateReplacements">
+        ///   When <see langword="false"/>, failure to replace a placeholder in the <paramref name="template"/> 
+        ///   for a given property will result in that property being skipped.
+        /// </param>
         /// <param name="includeProperty">
         ///   A delegate that will check if a given property name should be included.
         /// </param>
@@ -197,6 +203,7 @@ namespace Jaahas.Json {
             string template,
             bool isDefaultTemplate,
             Func<string, string?>? templateReplacements,
+            bool allowUnresolvedTemplateReplacements,
             Func<JsonPointer, bool>? includeProperty,
             bool recursive,
             int maxRecursionDepth,
@@ -219,16 +226,30 @@ namespace Jaahas.Json {
                 // depth; build a sample with the current element. When we have exceeded the
                 // maximum recursion depth, the value will be the serialized JSON of the element
                 // if the element is an object or an array.
-                var tagName = BuildSampleKeyFromTemplate(
-                    pointer.ToString(),
-                    elementStack,
-                    recursive,
-                    pathSeparator!,
-                    template,
-                    isDefaultTemplate,
-                    templateReplacements
-                );
-                yield return BuildSampleFromJsonValue(sampleTime, tagName, currentElement.Value);
+                string key = null!;
+                var error = false;
+
+                try {
+                    key = BuildSampleKeyFromTemplate(
+                        pointer.ToString(),
+                        elementStack,
+                        recursive,
+                        pathSeparator!,
+                        template,
+                        isDefaultTemplate,
+                        templateReplacements,
+                        allowUnresolvedTemplateReplacements
+                    );
+                }
+                catch (InvalidOperationException) {
+                    error = true;
+                }
+
+                if (error) {
+                    yield break;
+                }
+
+                yield return BuildSampleFromJsonValue(sampleTime, key, currentElement.Value);
             }
             else {
                 // We have doing recursive processing and have not exceeded the maximum recursion
@@ -251,6 +272,7 @@ namespace Jaahas.Json {
                                     template,
                                     isDefaultTemplate,
                                     templateReplacements,
+                                    allowUnresolvedTemplateReplacements,
                                     includeProperty,
                                     recursive,
                                     maxRecursionDepth, 
@@ -276,6 +298,7 @@ namespace Jaahas.Json {
                                     template,
                                     isDefaultTemplate,
                                     templateReplacements,
+                                    allowUnresolvedTemplateReplacements,
                                     includeProperty,
                                     recursive,
                                     maxRecursionDepth,
@@ -295,15 +318,23 @@ namespace Jaahas.Json {
                             yield break;
                         }
 
-                        var key = BuildSampleKeyFromTemplate(
-                            pointer.ToString(),
-                            elementStack,
-                            recursive,
-                            pathSeparator!,
-                            template, 
-                            isDefaultTemplate,
-                            templateReplacements
-                        );
+                        string key;
+
+                        try {
+                            key = BuildSampleKeyFromTemplate(
+                                pointer.ToString(),
+                                elementStack,
+                                recursive,
+                                pathSeparator!,
+                                template,
+                                isDefaultTemplate,
+                                templateReplacements,
+                                allowUnresolvedTemplateReplacements
+                            );
+                        }
+                        catch (InvalidOperationException) {
+                            break;
+                        }
 
                         yield return BuildSampleFromJsonValue(sampleTime, key, currentElement.Value);
                         break;
@@ -384,6 +415,10 @@ namespace Jaahas.Json {
         ///   The default placeholder replacement values to use, if a referenced property does not 
         ///   exist on <paramref name="parentObject"/>.
         /// </param>
+        /// <param name="allowUnresolvedReplacements">
+        ///   When <see langword="false"/>, failure to replace a placeholder in the <paramref name="template"/> 
+        ///   will result in an <see cref="InvalidOperationException"/> being thrown.
+        /// </param>
         /// <returns>
         ///   The generated key.
         /// </returns>
@@ -394,7 +429,8 @@ namespace Jaahas.Json {
             string pathSeparator,
             string template,
             bool isDefaultTemplate,
-            Func<string, string?>? defaultReplacements
+            Func<string, string?>? defaultReplacements,
+            bool allowUnresolvedReplacements
         ) {
             string GetFullPropertyName(bool forceLocalName = false) {
                 if (!recursive || forceLocalName) {
@@ -460,6 +496,9 @@ namespace Jaahas.Json {
 
                 // No match in the object stack: try and find a default replacement.
                 var replacement = defaultReplacements?.Invoke(pName);
+                if (replacement == null && !allowUnresolvedReplacements) {
+                    throw new InvalidOperationException(string.Format(CultureInfo.CurrentCulture, Resources.Error_UnresolvedTemplateParameter, pName));
+                }
 
                 // Return the replacement if available, otherwise return the original placeholder
                 // text.
