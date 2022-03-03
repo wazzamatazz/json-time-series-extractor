@@ -374,15 +374,20 @@ namespace Jaahas.Json {
                 return false;
             }
 
-            if (!el.Value.TryGetDateTimeOffset(out var dt)) {
-                // Not a timestamp. It might be ms since 01/01/1970 UTC.
-                dt = el.Value.TryGetInt64(out var ms)
-                    ? new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(ms)
-                    : default;
+            if (el.Value.ValueKind == JsonValueKind.String) {
+                if (el.Value.TryGetDateTimeOffset(out var dt)) {
+                    value = dt;
+                    return true;
+                }
+            }
+            else if (el.Value.ValueKind == JsonValueKind.Number) {
+                if (el.Value.TryGetInt64(out var ms)) {
+                    value = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(ms);
+                    return true;
+                }
             }
 
-            value = dt;
-            return true;
+            return false;
         }
 
 

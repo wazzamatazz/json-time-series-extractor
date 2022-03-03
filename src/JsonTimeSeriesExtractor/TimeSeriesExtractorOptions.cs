@@ -98,10 +98,20 @@ namespace Jaahas.Json {
         /// extracted from the JSON.
         /// </summary>
         /// <remarks>
+        /// 
+        /// <para>
         ///   If <see cref="TimestampProperty"/> is <see langword="null"/>, the configured 
         ///   timestamp property can not be found in the JSON document, or the property does not 
         ///   represent a <see cref="DateTimeOffset"/> value, <see cref="GetDefaultTimestamp"/> 
         ///   will be used the retrieve the sample time.
+        /// </para>
+        /// 
+        /// <para>
+        ///   Timestamps can be specified as a string value that can be directly parsed to <see cref="DateTimeOffset"/>, 
+        ///   or as a number value that represents the number of milliseconds since 1 January 1970 
+        ///   UTC.
+        /// </para>
+        /// 
         /// </remarks>
         public string? TimestampProperty { get; set; } = DefaultTimestampProperty;
 
