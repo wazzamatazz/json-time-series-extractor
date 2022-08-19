@@ -46,6 +46,8 @@ new TimeSeriesExtractorOptions() {
 
 If the `TimestampProperty` is `null`, or does not exist in the document, the delegate assigned to the `GetDefaultTimestamp` property on the `TimeSeriesExtractorOptions` is called to request a fallback timestamp to use. If no delegate has been specified, `DateTimeOffset.UtcNow` is used.
 
+You can use the `TimestampSource` property on a `TimeSeriesSample` instance to determine how the timestamp for the sample was obtained.
+
 
 ## Selecting the Properties to Handle
 
