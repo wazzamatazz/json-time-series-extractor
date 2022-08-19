@@ -17,9 +17,6 @@
     <CopyrightStartYear>2021</CopyrightStartYear>
   </PropertyGroup>
 
-  <!-- Import common NuGet package versions -->
-  <Import Project=".\build\Dependencies.props" Condition="Exists('.\build\Dependencies.props')" />
-
   <!-- Set copyright notice based on CopyrightStartYear property. -->
   <Import Project=".\build\Copyright.props" Condition="Exists('.\build\Copyright.props')" />
 

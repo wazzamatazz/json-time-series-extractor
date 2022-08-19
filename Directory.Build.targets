@@ -22,8 +22,7 @@
 
   <ItemGroup Condition=" '$(IncludeDevelopmentPackages)' == 'true' ">    
     <!-- SourceLink NuGet Package -->
-    <PackageReference Remove="Microsoft.SourceLink.GitHub" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="$(MicrosoftSourceLinkGitHubVersion)">
+    <PackageReference Include="Microsoft.SourceLink.GitHub">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>

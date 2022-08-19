@@ -8,8 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Text.Json" Version="$(SystemTextJsonVersion)" />
-    <PackageReference Include="JsonPointer.Net" Version="$(JsonPointerNetVersion)" />
+    <PackageReference Include="System.Text.Json" />
+    <PackageReference Include="JsonPointer.Net" />
   </ItemGroup>
 
   <ItemGroup>
