@@ -5,7 +5,7 @@ namespace Jaahas.Json {
     /// <summary>
     /// Describes a sample extracted from a JSON document using <see cref="TimeSeriesExtractor"/>.
     /// </summary>
-    public struct TimeSeriesSample {
+    public readonly struct TimeSeriesSample {
 
         /// <summary>
         /// The key (identifier) for the sample.
@@ -22,6 +22,11 @@ namespace Jaahas.Json {
         /// </summary>
         public object? Value { get; }
 
+        /// <summary>
+        /// Specifies where the <see cref="Timestamp"/> for the sample was sourced from.
+        /// </summary>
+        public TimestampSource TimestampSource { get; }
+
 
         /// <summary>
         /// Creates a new <see cref="TimeSeriesSample"/>.
@@ -35,10 +40,14 @@ namespace Jaahas.Json {
         /// <param name="value">
         ///   The sample value.
         /// </param>
-        public TimeSeriesSample(string key, DateTimeOffset timestamp, object? value) {
+        /// <param name="timestampSource">
+        ///   A flag describing the source of the specifed <paramref name="timestamp"/>.
+        /// </param>
+        public TimeSeriesSample(string key, DateTimeOffset timestamp, object? value, TimestampSource timestampSource = TimestampSource.Unspecified) {
             Key = key ?? throw new ArgumentNullException(nameof(key));
             Timestamp = timestamp;
             Value = value;
+            TimestampSource = timestampSource;
         }
 
     }

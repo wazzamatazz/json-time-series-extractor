@@ -40,6 +40,7 @@ namespace Jaahas.Json.Tests {
 
             Assert.AreEqual(13, samples.Length);
             Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
         }
 
 
@@ -71,6 +72,7 @@ namespace Jaahas.Json.Tests {
 
             Assert.AreEqual(13, samples.Length);
             Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
         }
 
 
@@ -102,6 +104,7 @@ namespace Jaahas.Json.Tests {
 
             Assert.AreEqual(13, samples.Length);
             Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
             Assert.IsTrue(samples.All(x => x.Key.StartsWith(TestContext.TestName + "/" + deviceSample.MacAddress)));
         }
 
@@ -143,6 +146,7 @@ namespace Jaahas.Json.Tests {
 
             Assert.AreEqual(13, samples.Length);
             Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
             Assert.IsTrue(samples.All(x => x.Key.StartsWith(TestContext.TestName + "/" + deviceSample.MacAddress + "/" + guid)));
         }
 
@@ -184,6 +188,7 @@ namespace Jaahas.Json.Tests {
 
             Assert.AreEqual(11, samples.Length);
             Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
             Assert.IsTrue(samples.All(x => x.Key.StartsWith(TestContext.TestName + "/" + deviceSample.MacAddress + "/" + deviceSample.DataFormat)));
         }
 
@@ -228,6 +233,7 @@ namespace Jaahas.Json.Tests {
 
             Assert.AreEqual(3, samples.Length);
             Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
             Assert.IsTrue(samples.All(x => x.Key.StartsWith(TestContext.TestName + "/" + deviceSample.MacAddress + "/" + deviceSample.DataFormat)));
         }
 
@@ -248,6 +254,7 @@ namespace Jaahas.Json.Tests {
             }).ToArray();
 
             Assert.AreEqual(deviceSamples.Length, samples.Length);
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.CurrentTime));
             Assert.IsTrue(samples.All(x => string.Equals(x.Key, TestContext.TestName + "/sample/Value")));
 
             for (var i = 0; i < deviceSamples.Length; i++) {
@@ -302,6 +309,7 @@ namespace Jaahas.Json.Tests {
 
             Assert.AreEqual(16, samples.Length);
             Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
         }
 
 
@@ -326,6 +334,7 @@ namespace Jaahas.Json.Tests {
 
             Assert.AreEqual(1, samples.Length);
             Assert.AreEqual("System A/Subsystem 1/measurements/temperature", samples[0].Key);
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.CurrentTime));
         }
 
 
@@ -350,6 +359,7 @@ namespace Jaahas.Json.Tests {
 
             Assert.AreEqual(1, samples.Length);
             Assert.AreEqual("System A/Subsystem 1/temperature", samples[0].Key);
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.CurrentTime));
         }
 
 
@@ -377,6 +387,8 @@ namespace Jaahas.Json.Tests {
             
             Assert.AreEqual("measurements", samples[1].Key);
             Assert.AreEqual(@"{""location"":""Subsystem 1"",""temperature"":14}", samples[1].Value);
+
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.CurrentTime));
         }
 
 
@@ -397,6 +409,7 @@ namespace Jaahas.Json.Tests {
 
             Assert.AreEqual(1, samples.Length);
             Assert.AreEqual(fallbackTimestamp, samples[0].Timestamp);
+            Assert.AreEqual(TimestampSource.FallbackProvider, samples[0].TimestampSource);
         }
 
 
@@ -415,6 +428,7 @@ namespace Jaahas.Json.Tests {
 
             Assert.AreEqual(1, samples.Length);
             Assert.AreEqual(TestContext.TestName + "/{deviceId}/value", samples[0].Key);
+            Assert.AreEqual(TimestampSource.CurrentTime, samples[0].TimestampSource);
         }
 
 
@@ -466,6 +480,7 @@ namespace Jaahas.Json.Tests {
 
             var expectedTimestamp = new DateTimeOffset(1970, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMilliseconds(ms);
             Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(expectedTimestamp.UtcDateTime)));
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
         }
 
     }

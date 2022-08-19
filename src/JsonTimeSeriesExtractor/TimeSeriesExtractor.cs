@@ -103,9 +103,21 @@ namespace Jaahas.Json {
         private static IEnumerable<TimeSeriesSample> GetSamplesCore(JsonElement element, TimeSeriesExtractorOptions options) {
             JsonPointer? tsPointer = null;
             DateTimeOffset sampleTime;
+            TimestampSource timestampSource = TimestampSource.Unspecified;
             
             if (options.TimestampProperty == null || !JsonPointer.TryParse(options.TimestampProperty, out tsPointer, JsonPointerKind.Plain) || !TryGetTimestamp(element, tsPointer!, options, out sampleTime)) {
-                sampleTime = options!.GetDefaultTimestamp?.Invoke() ?? DateTimeOffset.UtcNow;
+                var ts = options!.GetDefaultTimestamp?.Invoke();
+                if (ts == null) {
+                    sampleTime = DateTimeOffset.UtcNow;
+                    timestampSource = TimestampSource.CurrentTime;
+                }
+                else {
+                    sampleTime = ts.Value;
+                    timestampSource = TimestampSource.FallbackProvider;
+                }
+            }
+            else {
+                timestampSource = TimestampSource.Document;
             }
 
             Func<JsonPointer, bool>? handleProperty = options.IncludeProperty == null
@@ -138,6 +150,7 @@ namespace Jaahas.Json {
                 foreach (var val in GetSamplesCore(
                     pointerSegments,
                     sampleTime,
+                    timestampSource,
                     template,
                     isDefaultTemplate,
                     options.GetTemplateReplacement,
@@ -165,6 +178,9 @@ namespace Jaahas.Json {
         /// </param>
         /// <param name="sampleTime">
         ///   The timestamp to use for extracted tag values.
+        /// </param>
+        /// <param name="sampleTimeSource">
+        ///   The source of the <paramref name="sampleTime"/>.
         /// </param>
         /// <param name="template">
         ///   The template to use when generating the key for a given value.
@@ -200,6 +216,7 @@ namespace Jaahas.Json {
         private static IEnumerable<TimeSeriesSample> GetSamplesCore(
             Stack<KeyValuePair<string?, JsonElement>> elementStack,
             DateTimeOffset sampleTime,
+            TimestampSource sampleTimeSource,
             string template,
             bool isDefaultTemplate,
             Func<string, string?>? templateReplacements,
@@ -249,7 +266,7 @@ namespace Jaahas.Json {
                     yield break;
                 }
 
-                yield return BuildSampleFromJsonValue(sampleTime, key, currentElement.Value);
+                yield return BuildSampleFromJsonValue(sampleTime, sampleTimeSource, key, currentElement.Value);
             }
             else {
                 // We have doing recursive processing and have not exceeded the maximum recursion
@@ -269,6 +286,7 @@ namespace Jaahas.Json {
                                 foreach (var val in GetSamplesCore(
                                     elementStack,
                                     sampleTime,
+                                    sampleTimeSource,
                                     template,
                                     isDefaultTemplate,
                                     templateReplacements,
@@ -295,6 +313,7 @@ namespace Jaahas.Json {
                                 foreach (var val in GetSamplesCore(
                                     elementStack,
                                     sampleTime,
+                                    sampleTimeSource,
                                     template,
                                     isDefaultTemplate,
                                     templateReplacements,
@@ -336,7 +355,7 @@ namespace Jaahas.Json {
                             break;
                         }
 
-                        yield return BuildSampleFromJsonValue(sampleTime, key, currentElement.Value);
+                        yield return BuildSampleFromJsonValue(sampleTime, sampleTimeSource, key, currentElement.Value);
                         break;
                 }
             }
@@ -518,6 +537,9 @@ namespace Jaahas.Json {
         /// <param name="sampleTime">
         ///   The sample time for the value.
         /// </param>
+        /// <param name="sampleTimeSource">
+        ///   The source of the <paramref name="sampleTime"/>.
+        /// </param>
         /// <param name="key">
         ///   The sample key to use.
         /// </param>
@@ -529,6 +551,7 @@ namespace Jaahas.Json {
         /// </returns>
         private static TimeSeriesSample BuildSampleFromJsonValue(
             DateTimeOffset sampleTime,
+            TimestampSource sampleTimeSource,
             string key,
             JsonElement value
         ) {
@@ -556,7 +579,7 @@ namespace Jaahas.Json {
                     break;
             }
 
-            return new TimeSeriesSample(key, sampleTime, val);
+            return new TimeSeriesSample(key, sampleTime, val, sampleTimeSource);
         }
 
     }
