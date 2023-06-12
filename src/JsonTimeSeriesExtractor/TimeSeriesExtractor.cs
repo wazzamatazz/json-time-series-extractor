@@ -105,7 +105,7 @@ namespace Jaahas.Json {
             DateTimeOffset sampleTime;
             TimestampSource timestampSource = TimestampSource.Unspecified;
             
-            if (options.TimestampProperty == null || !JsonPointer.TryParse(options.TimestampProperty, out tsPointer, JsonPointerKind.Plain) || !TryGetTimestamp(element, tsPointer!, options, out sampleTime)) {
+            if (options.TimestampProperty == null || !JsonPointer.TryParse(options.TimestampProperty, out tsPointer) || !TryGetTimestamp(element, tsPointer!, options, out sampleTime)) {
                 var ts = options!.GetDefaultTimestamp?.Invoke();
                 if (ts == null) {
                     sampleTime = DateTimeOffset.UtcNow;
@@ -227,7 +227,7 @@ namespace Jaahas.Json {
             int currentRecursionDepth,
             string? pathSeparator
         ) {
-            var pointer = JsonPointer.Create(elementStack.Where(x => x.Key != null).Reverse().Select(x => PointerSegment.Create(x.Key!)), false);
+            var pointer = JsonPointer.Create(elementStack.Where(x => x.Key != null).Reverse().Select(x => PointerSegment.Create(x.Key!)));
 
             if (includeProperty != null) {
                 // Check if this property should be included.
