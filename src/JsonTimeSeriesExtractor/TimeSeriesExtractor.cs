@@ -393,6 +393,16 @@ namespace Jaahas.Json {
                 return false;
             }
 
+            if (options.TimestampParser != null) {
+                var dt = options.TimestampParser.Invoke(el.Value);
+                if (dt == null) {
+                    return false;
+                }
+
+                value = dt.Value;
+                return true;
+            }
+
             if (el.Value.ValueKind == JsonValueKind.String) {
                 if (el.Value.TryGetDateTimeOffset(out var dt)) {
                     value = dt;
