@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net461</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0</TargetFrameworks>
     <RootNamespace>Jaahas.Json</RootNamespace>
     <AssemblyName>Jaahas.Json.TimeSeriesExtractor</AssemblyName>
     <Description>A library for parsing time series data samples from JSON documents using System.Text.Json</Description>
