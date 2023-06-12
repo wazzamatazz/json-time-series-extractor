@@ -61,6 +61,15 @@ namespace Jaahas.Json {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to &apos;{0}&apos; is not a valid JSON poiinter..
+        /// </summary>
+        internal static string Error_InvalidJsonPointer {
+            get {
+                return ResourceManager.GetString("Error_InvalidJsonPointer", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Unable to find a replacement for template parameter &apos;{0}&apos;..
         /// </summary>
         internal static string Error_UnresolvedTemplateParameter {
