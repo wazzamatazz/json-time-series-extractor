@@ -73,6 +73,19 @@ namespace Jaahas.Json {
         public static IEnumerable<TimeSeriesSample> GetSamples(JsonElement element, TimeSeriesExtractorOptions? options = null) {
             options ??= new TimeSeriesExtractorOptions();
 
+            if (!string.IsNullOrWhiteSpace(options.StartAt)) {
+                if (!JsonPointer.TryParse(options.StartAt!, out var startAt)) {
+                    throw new ArgumentOutOfRangeException(nameof(options), string.Format(CultureInfo.CurrentCulture, options.StartAt));
+                }
+
+                var newElement = startAt!.Evaluate(element);
+                if (newElement == null) {
+                    yield break;
+                }
+
+                element = newElement.Value;
+            }
+
             if (element.ValueKind == JsonValueKind.Array) {
                 foreach (var item in element.EnumerateArray()) {
                     foreach (var value in GetSamples(item, options)) {

@@ -10,7 +10,7 @@ Add a NuGet package reference to [Jaahas.Json.TimeSeriesExtractor](https://www.n
 
 # Usage
 
-The [TimeSeriesExtractor](/src/JsonTimeSeriesExtractor/TimeSeriesExtractor.cs) class is the entry point for the library.
+The [TimeSeriesExtractor](./src/JsonTimeSeriesExtractor/TimeSeriesExtractor.cs) class is the entry point for the library.
 
 Call `TimeSeriesExtractor.GetSamples` to extract values from a JSON string or a `JsonElement`: 
 
@@ -22,12 +22,12 @@ const string json = @"{ ""timestamp"": ""2021-05-30T09:47:38Z"", ""temperature""
 var samples = TimeSeriesExtractor.GetSamples(json).ToArray();
 ```
 
-The JSON document must represent an object or an array of objects. You can customise the extraction behaviour by passing a [TimeSeriesExtractorOptions](/src/JsonTimeSeriesExtractor/TimeSeriesExtractorOptions.cs) object when calling the method.
+The JSON document must represent an object or an array of objects. You can customise the extraction behaviour by passing a [TimeSeriesExtractorOptions](./src/JsonTimeSeriesExtractor/TimeSeriesExtractorOptions.cs) object when calling the method.
 
 
 ## Data Samples
 
-Properties on the JSON objects are converted to instances of [TimeSeriesSample](/src/JsonTimeSeriesExtractor/TimeSeriesSample.cs). Although the type of the `Value` property on `TimeSeriesSample` is `object`, in practical terms the value will either be `null`, or one of the following types:
+Properties on the JSON objects are converted to instances of [TimeSeriesSample](./src/JsonTimeSeriesExtractor/TimeSeriesSample.cs). Although the type of the `Value` property on `TimeSeriesSample` is `object`, in practical terms the value will either be `null`, or one of the following types:
 
 - `double`
 - `string`
@@ -47,6 +47,28 @@ new TimeSeriesExtractorOptions() {
 If the `TimestampProperty` is `null`, or does not exist in the document, the delegate assigned to the `GetDefaultTimestamp` property on the `TimeSeriesExtractorOptions` is called to request a fallback timestamp to use. If no delegate has been specified, `DateTimeOffset.UtcNow` is used.
 
 You can use the `TimestampSource` property on a `TimeSeriesSample` instance to determine how the timestamp for the sample was obtained.
+
+Timestamps will be automatically parsed in one of the following ways:
+
+- If the raw JSON value is a string, the timestamp will be parsed using `DateTimeOffset.TryParse` and will fall back to the default timestamp if parsing fails.
+- If the raw JSON value is a number, it is assumed to represent milliseconds since midnight UTC on 01 January 1970.
+
+For custom timestamp parsing, see the next section.
+
+
+## Customising Timestamp Parsing
+
+Timestamp parsing can be overridden by setting the `TimestampParser` property on the `TimeSeriesExtractorOptions`. The property is a delegate that receives a `JsonElement` representing the timestamp property and returns a `DateTimeOffset?`. The delegate should return `null` if the timestamp cannot be parsed.
+
+For example, to parse timestamps where the timestamp property is the number of seconds since midnight UTC on 01 January 1970 instead of the number of milliseconds:
+
+```csharp
+new TimeSeriesExtractorOptions() {
+  TimestampParser = element => element.ValueKind == JsonValueKind.Number
+    ? DateTime.UnixEpoch.AddSeconds(element.GetInt64())
+    : null
+}
+```
 
 
 ## Selecting the Properties to Handle
@@ -208,8 +230,44 @@ Using the above example JSON and a template of `{location}/{$prop-local}`, the k
 > When recursive mode is disabled, the `{$prop}` and `${prop-local}` template placeholders are functionally identical.
 
 
+## Specifying a Custom Processing Start Position
+
+By default, processing starts at the root of the JSON document. However, in some scenarios it may be desirable to customise the start position. For example, consider the following example response from the [Airthings](https://developer.airthings.com) API:
+
+```json
+{
+  "data": {
+    "battery": 100,
+    "co2": 650.0,
+    "humidity": 26.0,
+    "pm1": 0.0,
+    "pm25": 0.0,
+    "pressure": 1028.7,
+    "radonShortTermAvg": 2.0,
+    "temp": 24.6,
+    "time": 1686421947,
+    "voc": 58.0,
+    "relayDeviceType": "hub"
+  }
+}
+```
+
+When processing the above document, it may be preferable to start at the `data` property instead of at the root of the document. This can be achieved by setting the `TimeSeriesExtractorOptions.StartAt` property to specify a JSON pointer to the desired start position:
+
+```csharp
+new TimeSeriesExtractorOptions() {
+  StartAt = "/data",
+  TimestampParser = element => element.ValueKind == JsonValueKind.Number
+    ? DateTime.UnixEpoch.AddSeconds(element.GetInt64())
+    : null
+}
+```
+
+Note that specifying a start position means that all features that use JSON pointers (including the configured timestamp property and the `{$prop}` placeholder for a given sample) become relative to the start position instead of the root of the JSON document. For example, in the above document the `{$prop}` placeholder for the humidity reading would be `humidity` instead of `data/humidity`.
+
+
 # Building the Solution
 
 The repository uses [Cake](https://cakebuild.net/) for cross-platform build automation. The build script allows for metadata such as a build counter to be specified when called by a continuous integration system such as TeamCity.
 
-A build can be run from the command line using the [build.ps1](/build.ps1) PowerShell script. For documentation about the available build script parameters, see [build.cake](/build.cake).
+A build can be run from the command line using the [build.ps1](./build.ps1) PowerShell script. For documentation about the available build script parameters, see [build.cake](./build.cake).

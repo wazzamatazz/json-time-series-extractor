@@ -29,6 +29,16 @@ namespace Jaahas.Json {
         public const int DefaultMaxDepth = 5;
 
         /// <summary>
+        /// Specifies a JSON Pointer path that the <see cref="TimeSeriesExtractor"/> should start 
+        /// processing data from.
+        /// </summary>
+        /// <remarks>
+        ///   If <see cref="StartAt"/> is <see langword="null"/> or white space, processing will 
+        ///   start from the root of the JSON document.
+        /// </remarks>
+        public string? StartAt { get; set; }
+
+        /// <summary>
         /// The template to use when generating keys for extracted values.
         /// </summary>
         /// <remarks>
@@ -315,7 +325,9 @@ namespace Jaahas.Json {
             MaxDepth = existing.MaxDepth;
             PathSeparator = existing.PathSeparator;
             Recursive = existing.Recursive;
+            StartAt = existing.StartAt;
             Template = existing.Template;
+            TimestampParser = existing.TimestampParser;
             TimestampProperty = existing.TimestampProperty;
         }
 
