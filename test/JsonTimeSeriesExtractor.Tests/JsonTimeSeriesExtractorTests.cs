@@ -519,5 +519,46 @@ namespace Jaahas.Json.Tests {
             Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
         }
 
+
+        [TestMethod]
+        public void ShouldAllowCustomStartPosition() {
+            long ms = 1646312969367;
+
+            var deviceSample = new {
+                data = new {
+                    time = ms,
+                    device1 = new {
+                        SignalStrength = -75,
+                        DataFormat = 5,
+                        Temperature = 19.3,
+                        Humidity = 37.905,
+                        Pressure = 1013.35,
+                        AccelerationX = -0.872,
+                        AccelerationY = 0.512,
+                        AccelerationZ = -0.04,
+                        BatteryVoltage = 3.085,
+                        TxPower = 4,
+                        MovementCounter = 5,
+                        MeasurementSequence = 34425,
+                        MacAddress = "AB:CD:EF:01:23:45"
+                    }
+                }
+            };
+
+            var json = JsonSerializer.Serialize(deviceSample);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                StartAt = "/data",
+                Recursive = true
+            }).ToArray();
+
+            Assert.AreEqual(13, samples.Length);
+            Assert.IsTrue(samples.All(x => x.Key.StartsWith("device1/")));
+
+            var expectedTimestamp = new DateTimeOffset(1970, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMilliseconds(ms);
+            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(expectedTimestamp.UtcDateTime)));
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
+        }
+
     }
 }
