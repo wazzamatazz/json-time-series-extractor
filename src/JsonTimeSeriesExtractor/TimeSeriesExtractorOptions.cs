@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Text.Json;
 
 namespace Jaahas.Json {
 
@@ -108,34 +107,13 @@ namespace Jaahas.Json {
         /// </para>
         /// 
         /// <para>
-        ///   By default, timestamps can be specified as a string value that can be directly parsed 
-        ///   to <see cref="DateTimeOffset"/>, or as a number value that represents the number of 
-        ///   milliseconds since 1 January 1970 UTC. The default parsing rules can be overridden 
-        ///   by specifying a value for the <see cref="TimestampParser"/> property.
+        ///   Timestamps can be specified as a string value that can be directly parsed to <see cref="DateTimeOffset"/>, 
+        ///   or as a number value that represents the number of milliseconds since 1 January 1970 
+        ///   UTC.
         /// </para>
         /// 
         /// </remarks>
-        /// <seealso cref="TimestampParser"/>
         public string? TimestampProperty { get; set; } = DefaultTimestampProperty;
-
-        /// <summary>
-        /// A delegate that overrides the default timestamp parser.
-        /// </summary>
-        /// <remarks>
-        /// 
-        /// <para>
-        ///   By default, timestamps can be specified as a string value that can be directly parsed 
-        ///   to <see cref="DateTimeOffset"/>, or as a number value that represents the number of 
-        ///   milliseconds since 1 January 1970 UTC.
-        /// </para>
-        /// 
-        /// <para>
-        ///   Specify a value for this property if you need to customise timestamp parsing e.g. if 
-        ///   the timestamp is specified as the number of whole seconds since 1 Januaty 1970.
-        /// </para>
-        /// 
-        /// </remarks>
-        public Func<JsonElement, DateTimeOffset?>? TimestampParser { get; set; }
 
         /// <summary>
         /// A delegate that will retrieve the default sample timestamp to use if a timestamp 
