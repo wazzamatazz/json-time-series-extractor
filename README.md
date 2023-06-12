@@ -48,15 +48,16 @@ If the `TimestampProperty` is `null`, or does not exist in the document, the del
 
 You can use the `TimestampSource` property on a `TimeSeriesSample` instance to determine how the timestamp for the sample was obtained.
 
-Timestamps will be automatically parsed in one of the following ways:
+Timestamps will be automatically parsed as follows:
 
-- If the raw JSON value is a string, the timestamp will be parsed using `DateTimeOffset.TryParse` and will fall back to the default timestamp if parsing fails.
-- If the raw JSON value is a number, it is assumed to represent milliseconds since midnight UTC on 01 January 1970.
+- If the raw JSON value is a string, the timestamp will be retrieved using `JsonElement.TryGetDateTimeOffset`.
+- If an integer value can be obtained from the JSON value using `JsonElement.TryGetInt64`, it is assumed to represent milliseconds since midnight UTC on 01 January 1970.
+- If a timestamp cannot be inferred from either of the above approaches, the default timestamp will be used instead.
 
-For custom timestamp parsing, see the next section.
+Custom timestamp parsing is described in the next section.
 
 
-## Customising Timestamp Parsing
+## Custom Timestamp Parsing
 
 Timestamp parsing can be overridden by setting the `TimestampParser` property on the `TimeSeriesExtractorOptions`. The property is a delegate that receives a `JsonElement` representing the timestamp property and returns a `DateTimeOffset?`. The delegate should return `null` if the timestamp cannot be parsed.
 
