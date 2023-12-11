@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 
+using Json.Pointer;
+
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Jaahas.Json.Tests {
@@ -66,7 +68,6 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() { 
-                Template = null!,
                 TimestampProperty = "/" + nameof(deviceSample.Timestamp)
             }).ToArray();
 
@@ -175,11 +176,11 @@ namespace Jaahas.Json.Tests {
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Template = TestContext.TestName + "/{MacAddress}/{DataFormat}/{$prop}",
                 TimestampProperty = "/" + nameof(deviceSample.Timestamp),
-                IncludeProperty = prop => { 
-                    if (prop.Equals("/" + nameof(deviceSample.DataFormat))) {
+                IncludeProperty = prop => {
+                    if (prop.ToString().Equals("/" + nameof(deviceSample.DataFormat))) {
                         return false;
                     }
-                    if (prop.Equals("/" + nameof(deviceSample.MacAddress))) {
+                    if (prop.ToString().Equals("/" + nameof(deviceSample.MacAddress))) {
                         return false;
                     }
                     return true;
@@ -218,13 +219,13 @@ namespace Jaahas.Json.Tests {
                 Template = TestContext.TestName + "/{MacAddress}/{DataFormat}/{$prop}",
                 TimestampProperty = "/" + nameof(deviceSample.Timestamp),
                 IncludeProperty = prop => {
-                    if (prop.Equals("/" + nameof(deviceSample.Temperature))) {
+                    if (prop.ToString().Equals("/" + nameof(deviceSample.Temperature))) {
                         return true;
                     }
-                    if (prop.Equals("/" + nameof(deviceSample.Humidity))) {
+                    if (prop.ToString().Equals("/" + nameof(deviceSample.Humidity))) {
                         return true;
                     }
-                    if (prop.Equals("/" + nameof(deviceSample.Pressure))) {
+                    if (prop.ToString().Equals("/" + nameof(deviceSample.Pressure))) {
                         return true;
                     }
                     return false;
@@ -329,7 +330,7 @@ namespace Jaahas.Json.Tests {
                 Template = "{location}/{$prop}",
                 PathSeparator = "/",
                 Recursive = true,
-                IncludeProperty = prop => !prop.EndsWith("/location")
+                IncludeProperty = prop => !prop.Segments.Last().Value.Equals("location")
             }).ToArray();
 
             Assert.AreEqual(1, samples.Length);
@@ -354,7 +355,7 @@ namespace Jaahas.Json.Tests {
                 Template = "{location}/{$prop-local}",
                 PathSeparator = "/",
                 Recursive = true,
-                IncludeProperty = prop => !prop.EndsWith("/location")
+                IncludeProperty = prop => !prop.Segments.Last().Value.Equals("location")
             }).ToArray();
 
             Assert.AreEqual(1, samples.Length);
@@ -558,6 +559,186 @@ namespace Jaahas.Json.Tests {
             var expectedTimestamp = new DateTimeOffset(1970, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMilliseconds(ms);
             Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(expectedTimestamp.UtcDateTime)));
             Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
+        }
+
+
+        [TestMethod]
+        public void ShouldAllowNestedTimestampsInRecursiveMode() {
+            var now = DateTimeOffset.UtcNow;
+
+            var deviceSample = new { 
+                data = new[] {
+                    new {
+                        time = now.AddHours(-2),
+                        temperature = 19.3
+                    },
+                    new {
+                        time = now.AddHours(-1),
+                        temperature = 20.6
+                    }
+                }
+            };
+
+            var json = JsonSerializer.Serialize(deviceSample);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                Recursive = true,
+                AllowNestedTimestamps = true
+            }).ToArray();
+
+            Assert.AreEqual(2, samples.Length);
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.AreEqual(deviceSample.data[0].time, samples[0].Timestamp);
+            Assert.AreEqual(deviceSample.data[0].temperature, samples[0].Value);
+            Assert.AreEqual(deviceSample.data[1].time, samples[1].Timestamp);
+            Assert.AreEqual(deviceSample.data[1].temperature, samples[1].Value);
+        }
+
+
+        [TestMethod]
+        public void ShouldNotAllowNestedTimestampsInRecursiveMode() {
+            var now = DateTimeOffset.UtcNow;
+
+            var deviceSample = new {
+                time = now,
+                data = new[] {
+                    new {
+                        time = now.AddHours(-2),
+                        temperature = 19.3
+                    },
+                    new {
+                        time = now.AddHours(-1),
+                        temperature = 20.6
+                    }
+                }
+            };
+
+            var json = JsonSerializer.Serialize(deviceSample);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                Recursive = true,
+                AllowNestedTimestamps = false
+            }).ToArray();
+
+            // 4 samples because the nested time properties are not treated as timestamps
+            Assert.AreEqual(4, samples.Length);
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.IsTrue(samples.All(x => x.Timestamp.Equals(deviceSample.time)));
+
+            Assert.AreEqual(JsonSerializer.Serialize(deviceSample.data[0].time).Trim('"'), samples[0].Value);
+            Assert.AreEqual(deviceSample.data[0].temperature, samples[1].Value);
+            Assert.AreEqual(JsonSerializer.Serialize(deviceSample.data[1].time).Trim('"'), samples[2].Value);
+            Assert.AreEqual(deviceSample.data[1].temperature, samples[3].Value);
+        }
+
+
+        [TestMethod]
+        public void ShouldInheritTimestampFromAncestorLevelInRecursiveMode() {
+            var now = DateTimeOffset.UtcNow;
+
+            var deviceSample = new {
+                data = new { 
+                    time = now,
+                    samples = new[] {
+                        new {
+                            temperature = 19.3
+                        },
+                        new {
+                            temperature = 20.6
+                        }
+                    }
+                }
+            };
+
+            var json = JsonSerializer.Serialize(deviceSample);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                Recursive = true,
+                AllowNestedTimestamps = true
+            }).ToArray();
+
+            Assert.AreEqual(2, samples.Length);
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.AreEqual(deviceSample.data.time, samples[0].Timestamp);
+            Assert.AreEqual(deviceSample.data.time, samples[1].Timestamp);
+            Assert.AreEqual(deviceSample.data.samples[0].temperature, samples[0].Value);
+            Assert.AreEqual(deviceSample.data.samples[1].temperature, samples[1].Value);
+        }
+
+
+        [TestMethod]
+        public void ShouldIncludeArrayIndexesInSampleKeys() {
+            var now = DateTimeOffset.UtcNow;
+
+            var deviceSample = new {
+                data = new[] {
+                    new {
+                        time = now.AddHours(-2),
+                        temperature = 19.3
+                    },
+                    new {
+                        time = now.AddHours(-1),
+                        temperature = 20.6
+                    }
+                }
+            };
+
+            var json = JsonSerializer.Serialize(deviceSample);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                Recursive = true,
+                AllowNestedTimestamps = true,
+                IncludeArrayIndexesInSampleKeys = true
+            }).ToArray(); 
+
+            Assert.AreEqual(2, samples.Length);
+
+            Assert.AreEqual("data/0/temperature", samples[0].Key);
+            Assert.AreEqual("data/1/temperature", samples[1].Key);
+
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.AreEqual(deviceSample.data[0].time, samples[0].Timestamp);
+            Assert.AreEqual(deviceSample.data[1].time, samples[1].Timestamp);
+            Assert.AreEqual(deviceSample.data[0].temperature, samples[0].Value);
+            Assert.AreEqual(deviceSample.data[1].temperature, samples[1].Value);
+        }
+
+
+        [TestMethod]
+        public void ShouldNotIncludeArrayIndexesInSampleKeys() {
+            var now = DateTimeOffset.UtcNow;
+
+            var deviceSample = new {
+                data = new[] {
+                    new {
+                        time = now.AddHours(-2),
+                        temperature = 19.3
+                    },
+                    new {
+                        time = now.AddHours(-1),
+                        temperature = 20.6
+                    }
+                }
+            };
+
+            var json = JsonSerializer.Serialize(deviceSample);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                Recursive = true,
+                AllowNestedTimestamps = true,
+                IncludeArrayIndexesInSampleKeys = false
+            }).ToArray();
+
+            Assert.AreEqual(2, samples.Length);
+
+            Assert.AreEqual("data/temperature", samples[0].Key);
+            Assert.AreEqual("data/temperature", samples[1].Key);
+
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.AreEqual(deviceSample.data[0].time, samples[0].Timestamp);
+            Assert.AreEqual(deviceSample.data[1].time, samples[1].Timestamp);
+            Assert.AreEqual(deviceSample.data[0].temperature, samples[0].Value);
+            Assert.AreEqual(deviceSample.data[1].temperature, samples[1].Value);
         }
 
     }
