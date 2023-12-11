@@ -61,7 +61,7 @@ namespace Jaahas.Json {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to &apos;{0}&apos; is not a valid JSON poiinter..
+        ///   Looks up a localized string similar to &apos;{0}&apos; is not a valid JSON pointer..
         /// </summary>
         internal static string Error_InvalidJsonPointer {
             get {
