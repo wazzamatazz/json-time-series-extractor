@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
@@ -13,7 +14,7 @@ namespace Jaahas.Json {
     /// Utility class for extracting key-timestamp-value time series data from JSON objects.
     /// </summary>
     /// <seealso cref="TimeSeriesExtractorOptions"/>
-    public class TimeSeriesExtractor {
+    public sealed class TimeSeriesExtractor {
 
         /// <summary>
         /// Template placeholder for the full JSON Pointer path to a property.
@@ -28,7 +29,7 @@ namespace Jaahas.Json {
         /// <summary>
         /// Matches JSON property name references in sample key templates.
         /// </summary>
-        private static readonly Regex s_tagNameTemplateMatcher = new Regex(@"\{(?<property>[^\}]+?)\}", RegexOptions.Singleline);
+        private static readonly Regex s_sampleKeyTemplateMatcher = new Regex(@"\{(?<property>[^\}]+?)\}", RegexOptions.Singleline);
 
 
         /// <summary>
@@ -69,13 +70,21 @@ namespace Jaahas.Json {
         ///   <paramref name="element"/> must have a <see cref="JsonValueKind"/> of <see cref="JsonValueKind.Object"/> 
         ///   or <see cref="JsonValueKind.Array"/>.
         /// </remarks>
+        /// <exception cref="ValidationException">
+        ///   <paramref name="options"/> is not valid.
+        /// </exception>
         /// <seealso cref="TimeSeriesExtractorOptions"/>
         public static IEnumerable<TimeSeriesSample> GetSamples(JsonElement element, TimeSeriesExtractorOptions? options = null) {
-            options ??= new TimeSeriesExtractorOptions();
+            if (options == null) {
+                options = new TimeSeriesExtractorOptions();
+            }
+            else {
+                Validator.ValidateObject(options, new ValidationContext(options), true);
+            }
 
-            if (!string.IsNullOrWhiteSpace(options.StartAt)) {
-                if (!JsonPointer.TryParse(options.StartAt!, out var startAt)) {
-                    throw new ArgumentOutOfRangeException(nameof(options), string.Format(CultureInfo.CurrentCulture, options.StartAt));
+            if (options.StartAt != null) {
+                if (!JsonPointer.TryParse(options.StartAt, out var startAt)) {
+                    throw new ArgumentOutOfRangeException(nameof(options), string.Format(CultureInfo.CurrentCulture, Resources.Error_InvalidJsonPointer, options.StartAt));
                 }
 
                 var newElement = startAt!.Evaluate(element);
@@ -114,70 +123,34 @@ namespace Jaahas.Json {
         ///   The parsed tag values.
         /// </returns>
         private static IEnumerable<TimeSeriesSample> GetSamplesCore(JsonElement element, TimeSeriesExtractorOptions options) {
-            JsonPointer? tsPointer = null;
-            DateTimeOffset sampleTime;
-            TimestampSource timestampSource = TimestampSource.Unspecified;
-            
-            if (options.TimestampProperty == null || !JsonPointer.TryParse(options.TimestampProperty, out tsPointer) || !TryGetTimestamp(element, tsPointer!, options, out sampleTime)) {
-                var ts = options!.GetDefaultTimestamp?.Invoke();
+            var context = new TimeSeriesExtractorContext(options);
+
+            ParsedTimestamp defaultTimestamp;
+
+            if (context.TimestampPointer == null || !TryGetTimestamp(element, context.TimestampPointer, context.Options, out var sampleTime)) {
+                var ts = options.GetDefaultTimestamp?.Invoke();
                 if (ts == null) {
-                    sampleTime = DateTimeOffset.UtcNow;
-                    timestampSource = TimestampSource.CurrentTime;
+                    defaultTimestamp = new ParsedTimestamp(DateTimeOffset.UtcNow, TimestampSource.CurrentTime, null);
                 }
                 else {
-                    sampleTime = ts.Value;
-                    timestampSource = TimestampSource.FallbackProvider;
+                    defaultTimestamp = new ParsedTimestamp(ts.Value, TimestampSource.FallbackProvider, null);
                 }
             }
             else {
-                timestampSource = TimestampSource.Document;
+                defaultTimestamp = new ParsedTimestamp(sampleTime, TimestampSource.Document, context.TimestampPointer);
             }
+            context.TimestampStack.Push(defaultTimestamp);
 
-            Func<JsonPointer, bool>? handleProperty = options.IncludeProperty == null
-                ? tsPointer == null
-                    ? null
-                    : path => !path.Equals(tsPointer)
-                : tsPointer == null
-                    ? path => options.IncludeProperty.Invoke(path.ToString())
-                    : path => !path.Equals(tsPointer) && options.IncludeProperty.Invoke(path.ToString());
-
-            var pointerSegments = new Stack<KeyValuePair<string?, JsonElement>>();
-            pointerSegments.Push(new KeyValuePair<string?, JsonElement>(null, element));
-
-            var template = string.IsNullOrWhiteSpace(options.Template)
-                ? TimeSeriesExtractorOptions.DefaultTemplate
-                : options.Template;
-
-            // We are using the default template if:
-            //
-            // 1. We are running in recursive mode and the template is equal to FullPropertyNamePlaceholder.
-            // 2. We are running in non-recursive mode and the template is equal to FullPropertyNamePlaceholder
-            //    or LocalPropertyNamePlaceholder. 
-            var isDefaultTemplate = options.Recursive 
-                ? string.Equals(template, FullPropertyNamePlaceholder, StringComparison.Ordinal)
-                : string.Equals(template, FullPropertyNamePlaceholder, StringComparison.Ordinal) || string.Equals(template, LocalPropertyNamePlaceholder, StringComparison.Ordinal);
+            context.ElementStack.Push(new KeyValuePair<string?, JsonElement>(null, element));
 
             foreach (var prop in element.EnumerateObject()) {
-                pointerSegments.Push(new KeyValuePair<string?, JsonElement>(prop.Name, prop.Value));
+                context.ElementStack.Push(new KeyValuePair<string?, JsonElement>(prop.Name, prop.Value));
 
-                foreach (var val in GetSamplesCore(
-                    pointerSegments,
-                    sampleTime,
-                    timestampSource,
-                    template,
-                    isDefaultTemplate,
-                    options.GetTemplateReplacement,
-                    options.AllowUnresolvedTemplateReplacements,
-                    handleProperty,
-                    options.Recursive,
-                    options.MaxDepth,
-                    1,
-                    options.PathSeparator
-                )) {
+                foreach (var val in GetSamplesCore(context, 1)) {
                     yield return val;
                 }
 
-                pointerSegments.Pop();
+                context.ElementStack.Pop();
             }
         }
 
@@ -185,73 +158,29 @@ namespace Jaahas.Json {
         /// <summary>
         /// Extracts samples from a JSON element.
         /// </summary>
-        /// <param name="elementStack">
-        ///   The stack of objects with the current object being processed at the top and the root 
-        ///   object in the hierarchy at the bottom.
-        /// </param>
-        /// <param name="sampleTime">
-        ///   The timestamp to use for extracted tag values.
-        /// </param>
-        /// <param name="sampleTimeSource">
-        ///   The source of the <paramref name="sampleTime"/>.
-        /// </param>
-        /// <param name="template">
-        ///   The template to use when generating the key for a given value.
-        /// </param>
-        /// <param name="isDefaultTemplate">
-        ///   Specifies if <paramref name="template"/> is equal to <see cref="TimeSeriesExtractorOptions.DefaultTemplate"/>.
-        /// </param>
-        /// <param name="templateReplacements">
-        ///   A callback for retrieving the default replacements for <paramref name="template"/>.
-        /// </param>
-        /// <param name="allowUnresolvedTemplateReplacements">
-        ///   When <see langword="false"/>, failure to replace a placeholder in the <paramref name="template"/> 
-        ///   for a given property will result in that property being skipped.
-        /// </param>
-        /// <param name="includeProperty">
-        ///   A delegate that will check if a given property name should be included.
-        /// </param>
-        /// <param name="recursive">
-        ///   Specifies if recursive mode is enabled.
-        /// </param>
-        /// <param name="maxRecursionDepth">
-        ///   The maximum number of recursive calls that the method is allowed to make.
+        /// <param name="context">
+        ///   The extractor context.
         /// </param>
         /// <param name="currentRecursionDepth">
         ///   The recursion depth for the current iteration of the method.
-        /// </param>
-        /// <param name="pathSeparator">
-        ///   The recursive path separator to use.
         /// </param>
         /// <returns>
         ///   The extracted tag values.
         /// </returns>
         private static IEnumerable<TimeSeriesSample> GetSamplesCore(
-            Stack<KeyValuePair<string?, JsonElement>> elementStack,
-            DateTimeOffset sampleTime,
-            TimestampSource sampleTimeSource,
-            string template,
-            bool isDefaultTemplate,
-            Func<string, string?>? templateReplacements,
-            bool allowUnresolvedTemplateReplacements,
-            Func<JsonPointer, bool>? includeProperty,
-            bool recursive,
-            int maxRecursionDepth,
-            int currentRecursionDepth,
-            string? pathSeparator
+            TimeSeriesExtractorContext context,
+            int currentRecursionDepth
         ) {
-            var pointer = JsonPointer.Create(elementStack.Where(x => x.Key != null).Reverse().Select(x => PointerSegment.Create(x.Key!)));
+            var pointer = JsonPointer.Create(context.ElementStack.Where(x => x.Key != null).Reverse().Select(x => PointerSegment.Create(x.Key!)));
 
-            if (includeProperty != null) {
-                // Check if this property should be included.
-                if (!includeProperty.Invoke(pointer)) {
-                    yield break;
-                }
+            // Check if this property should be included.
+            if (!context.IncludeElement.Invoke(pointer)) {
+                yield break;
             }
 
-            var currentElement = elementStack.Peek();
+            var currentElement = context.ElementStack.Peek();
 
-            if (!recursive || (maxRecursionDepth > 0 && currentRecursionDepth >= maxRecursionDepth)) {
+            if (!context.Options.Recursive || (context.Options.MaxDepth > 0 && currentRecursionDepth >= context.Options.MaxDepth)) {
                 // We are not using recursive mode, or we have exceeded the maximum recursion
                 // depth; build a sample with the current element. When we have exceeded the
                 // maximum recursion depth, the value will be the serialized JSON of the element
@@ -261,14 +190,10 @@ namespace Jaahas.Json {
 
                 try {
                     key = BuildSampleKeyFromTemplate(
-                        pointer.ToString(),
-                        elementStack,
-                        recursive,
-                        pathSeparator!,
-                        template,
-                        isDefaultTemplate,
-                        templateReplacements,
-                        allowUnresolvedTemplateReplacements
+                        context.Options,
+                        pointer,
+                        context.ElementStack,
+                        context.IsDefaultSampleKeyTemplate
                     );
                 }
                 catch (InvalidOperationException) {
@@ -279,74 +204,58 @@ namespace Jaahas.Json {
                     yield break;
                 }
 
-                yield return BuildSampleFromJsonValue(sampleTime, sampleTimeSource, key, currentElement.Value);
+                var timestamp = context.TimestampStack.Peek();
+                yield return BuildSampleFromJsonValue(timestamp.Timestamp, timestamp.Source, key, currentElement.Value);
             }
             else {
                 // We have doing recursive processing and have not exceeded the maximum recursion
                 // depth, so continue as normal.
 
-                if (string.IsNullOrWhiteSpace(pathSeparator)) {
-                    pathSeparator = "/";
-                };
-
                 switch (currentElement.Value.ValueKind) {
                     case JsonValueKind.Object:
+                        var popTimestamp = false;
+                        if (context.Options.AllowNestedTimestamps && context.TimestampPointer != null && TryGetTimestamp(currentElement.Value, context.TimestampPointer, context.Options, out var sampleTime)) {
+                            context.TimestampStack.Push(new ParsedTimestamp(sampleTime, TimestampSource.Document, pointer.Combine(context.TimestampPointer)));
+                            popTimestamp = true;
+                        }
+
+                        foreach (var item in currentElement.Value.EnumerateObject()) {
+                            context.ElementStack.Push(new KeyValuePair<string?, JsonElement>(item.Name, item.Value));
+
+                            foreach (var val in GetSamplesCore(
+                                context,
+                                currentRecursionDepth + 1
+                            )) {
+                                yield return val;
+                            }
+
+                            context.ElementStack.Pop();
+                        }
+
+                        if (popTimestamp) {
+                            context.TimestampStack.Pop();
+                        }
+                        break;
                     case JsonValueKind.Array:
-                        if (currentElement.Value.ValueKind == JsonValueKind.Object) {
-                            foreach (var item in currentElement.Value.EnumerateObject()) {
-                                elementStack.Push(new KeyValuePair<string?, JsonElement>(item.Name, item.Value));
+                        var index = -1;
 
-                                foreach (var val in GetSamplesCore(
-                                    elementStack,
-                                    sampleTime,
-                                    sampleTimeSource,
-                                    template,
-                                    isDefaultTemplate,
-                                    templateReplacements,
-                                    allowUnresolvedTemplateReplacements,
-                                    includeProperty,
-                                    recursive,
-                                    maxRecursionDepth, 
-                                    currentRecursionDepth + 1,
-                                    pathSeparator
-                                )) {
-                                    yield return val;
-                                }
+                        foreach (var item in currentElement.Value.EnumerateArray()) {
+                            ++index;
 
-                                elementStack.Pop();
+                            context.ElementStack.Push(new KeyValuePair<string?, JsonElement>(index.ToString(), item));
+
+                            foreach (var val in GetSamplesCore(
+                                context,
+                                currentRecursionDepth + 1
+                            )) {
+                                yield return val;
                             }
+
+                            context.ElementStack.Pop();
                         }
-                        else {
-                            var index = -1;
-                            foreach (var item in currentElement.Value.EnumerateArray()) {
-                                ++index;
-
-                                elementStack.Push(new KeyValuePair<string?, JsonElement>(index.ToString(), item));
-
-                                foreach (var val in GetSamplesCore(
-                                    elementStack,
-                                    sampleTime,
-                                    sampleTimeSource,
-                                    template,
-                                    isDefaultTemplate,
-                                    templateReplacements,
-                                    allowUnresolvedTemplateReplacements,
-                                    includeProperty,
-                                    recursive,
-                                    maxRecursionDepth,
-                                    currentRecursionDepth + 1,
-                                    pathSeparator
-                                )) {
-                                    yield return val;
-                                }
-
-                                elementStack.Pop();
-                            }
-                        }
-
                         break;
                     default:
-                        if (elementStack.Count == 0) {
+                        if (context.ElementStack.Count == 0) {
                             yield break;
                         }
 
@@ -354,21 +263,18 @@ namespace Jaahas.Json {
 
                         try {
                             key = BuildSampleKeyFromTemplate(
-                                pointer.ToString(),
-                                elementStack,
-                                recursive,
-                                pathSeparator!,
-                                template,
-                                isDefaultTemplate,
-                                templateReplacements,
-                                allowUnresolvedTemplateReplacements
+                                context.Options,
+                                pointer,
+                                context.ElementStack,
+                                context.IsDefaultSampleKeyTemplate
                             );
                         }
                         catch (InvalidOperationException) {
                             break;
                         }
 
-                        yield return BuildSampleFromJsonValue(sampleTime, sampleTimeSource, key, currentElement.Value);
+                        var timestamp = context.TimestampStack.Peek();
+                        yield return BuildSampleFromJsonValue(timestamp.Timestamp, timestamp.Source, key, currentElement.Value);
                         break;
                 }
             }
@@ -376,10 +282,10 @@ namespace Jaahas.Json {
 
 
         /// <summary>
-        /// Tries to extract the timestamp for samples from the specified JSON object.
+        /// Tries to parse the timestamp to use for samples extracted from the specified root object.
         /// </summary>
         /// <param name="element">
-        ///   The JSON object.
+        ///   The root JSON object.
         /// </param>
         /// <param name="pointer">
         ///   The pointer to the timestamp property.
@@ -436,6 +342,9 @@ namespace Jaahas.Json {
         /// <summary>
         /// Builds a key for a <see cref="TimeSeriesSample"/> from the specified template.
         /// </summary>
+        /// <param name="options">
+        ///   The extraction options.
+        /// </param>
         /// <param name="pointer">
         ///   The JSON pointer for the element that is currently being processed.
         /// </param>
@@ -443,50 +352,33 @@ namespace Jaahas.Json {
         ///   The stack of objects with the current object being processed at the top and the root 
         ///   object in the hierarchy at the bottom.
         /// </param>
-        /// <param name="recursive">
-        ///   When <see langword="true"/>, all matching replacements from all levels of the 
-        ///   <paramref name="elementStack"/> will be returned, instead of just looking at the 
-        ///   object on top of the stack.
-        /// </param>
-        /// <param name="pathSeparator">
-        ///   The path separator to use when joining multiple replacements together in recursive 
-        ///   mode.
-        /// </param>
-        /// <param name="template">
-        ///   The sample key template.
-        /// </param>
         /// <param name="isDefaultTemplate">
-        ///   Specifies if <paramref name="template"/> is equal to <see cref="TimeSeriesExtractorOptions.DefaultTemplate"/>.
-        /// </param>
-        /// <param name="defaultReplacements">
-        ///   The default placeholder replacement values to use, if a referenced property does not 
-        ///   exist on <paramref name="parentObject"/>.
-        /// </param>
-        /// <param name="allowUnresolvedReplacements">
-        ///   When <see langword="false"/>, failure to replace a placeholder in the <paramref name="template"/> 
-        ///   will result in an <see cref="InvalidOperationException"/> being thrown.
+        ///   Specifies if <paramref name="template"/> is the default sample key template.
         /// </param>
         /// <returns>
         ///   The generated key.
         /// </returns>
         private static string BuildSampleKeyFromTemplate(
-            string pointer,
+            TimeSeriesExtractorOptions options,
+            JsonPointer pointer,
             IEnumerable<KeyValuePair<string?, JsonElement>> elementStack,
-            bool recursive,
-            string pathSeparator,
-            string template,
-            bool isDefaultTemplate,
-            Func<string, string?>? defaultReplacements,
-            bool allowUnresolvedReplacements
+            bool isDefaultTemplate
+            
         ) {
             string GetFullPropertyName(bool forceLocalName = false) {
-                if (!recursive || forceLocalName) {
-                    return pointer.Substring(pointer.LastIndexOf('/') + 1);
+                if (!options.Recursive || forceLocalName) {
+                    return pointer.Segments.Last().Value;
                 }
 
-                return string.Equals(pathSeparator, TimeSeriesExtractorOptions.DefaultPathSeparator, StringComparison.Ordinal)
-                    ? pointer.TrimStart('/')
-                    : pointer.TrimStart('/').Replace("/", pathSeparator);
+                if (options.IncludeArrayIndexesInSampleKeys) {
+                    return string.Equals(options.PathSeparator, TimeSeriesExtractorOptions.DefaultPathSeparator, StringComparison.Ordinal)
+                        ? pointer.ToString().TrimStart('/')
+                        : pointer.ToString().TrimStart('/').Replace("/", options.PathSeparator);
+                }
+
+                // Remove array indexes from the path. An array index is any segment that can be
+                // parsed to an integer.
+                return string.Join(options.PathSeparator, pointer.Segments.Where(x => !int.TryParse(x.Value, out _)).Select(x => x.Value));
             }
 
             if (isDefaultTemplate) {
@@ -499,20 +391,22 @@ namespace Jaahas.Json {
             KeyValuePair<string?, JsonElement>[] elementStackInHierarchyOrder = null!;
 
             KeyValuePair<string?, JsonElement>[] GetElementStackInHierarchyOrder() {
-                elementStackInHierarchyOrder ??= recursive
-                    ? elementStack.Reverse().ToArray()
+                elementStackInHierarchyOrder ??= options.Recursive
+                    ? options.IncludeArrayIndexesInSampleKeys
+                        ? elementStack.Reverse().ToArray()
+                        : elementStack.Reverse().Where(x => x.Key == null || !int.TryParse(x.Key, out _)).ToArray()
                     : Array.Empty<KeyValuePair<string?, JsonElement>>();
                 return elementStackInHierarchyOrder;
             }
 
-            return s_tagNameTemplateMatcher.Replace(template, m => {
+            return s_sampleKeyTemplateMatcher.Replace(options.Template, m => {
                 var pName = m.Groups["property"].Value;
 
                 if (string.Equals(pName, "$prop", StringComparison.Ordinal) || string.Equals(pName, "$prop-local", StringComparison.Ordinal)) {
                     return GetFullPropertyName(string.Equals(pName, "$prop-local", StringComparison.Ordinal)) ?? m.Value;
                 }
 
-                if (recursive) {
+                if (options.Recursive) {
                     // Recursive mode: try and get matching replacements from every object in the
                     // stack (starting from the root) and concatenate them using the path separator.
 
@@ -529,7 +423,7 @@ namespace Jaahas.Json {
                     }
 
                     if (propVals.Count > 0) {
-                        return string.Join(pathSeparator, propVals);
+                        return string.Join(options.PathSeparator, propVals);
                     }
                 }
                 else {
@@ -542,8 +436,8 @@ namespace Jaahas.Json {
                 }
 
                 // No match in the object stack: try and find a default replacement.
-                var replacement = defaultReplacements?.Invoke(pName);
-                if (replacement == null && !allowUnresolvedReplacements) {
+                var replacement = options.GetTemplateReplacement?.Invoke(pName);
+                if (replacement == null && !options.AllowUnresolvedTemplateReplacements) {
                     throw new InvalidOperationException(string.Format(CultureInfo.CurrentCulture, Resources.Error_UnresolvedTemplateParameter, pName));
                 }
 

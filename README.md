@@ -36,7 +36,7 @@ Properties on the JSON objects are converted to instances of [TimeSeriesSample](
 
 ## Selecting the Timestamp
 
-The `TimestampProperty` on `TimeSeriesExtractorOptions` defines the JSON Pointer path that is used to retrieve the timestamp for the samples extrcated from the JSON object. By default, this property is set to `/time`, but can overridden if required:
+The `TimestampProperty` on `TimeSeriesExtractorOptions` defines the JSON Pointer path that is used to retrieve the timestamp for the samples extracted from the JSON object. By default, this property is set to `/time`, but can overridden if required:
 
 ```csharp
 new TimeSeriesExtractorOptions() {
@@ -54,7 +54,7 @@ Timestamps will be automatically parsed as follows:
 - If an integer value can be obtained from the JSON value using `JsonElement.TryGetInt64`, it is assumed to represent milliseconds since midnight UTC on 01 January 1970.
 - If a timestamp cannot be inferred from either of the above approaches, the default timestamp will be used instead.
 
-Custom timestamp parsing is described in the next section.
+Custom timestamp parsing is described in the next section. Additional timestamp parsing behaviour can be specified when recursive mode is enabled. See below for more details.
 
 
 ## Custom Timestamp Parsing
@@ -74,7 +74,7 @@ new TimeSeriesExtractorOptions() {
 
 ## Selecting the Properties to Handle
 
-By default, `TimeSeriesExtractor` will create a sample for each property on the object except for the configured timestamp property. To customise if a property will be included or excluded, you can assign a delegate to the `IncludeProperty` property on the `TimeSeriesExtractorOptions` instance passed to the extractor. The delegate receives a string that contains the JSON Pointer path to the property, and returns a Boolean value indicating if the property should be handled or not.
+By default, `TimeSeriesExtractor` will create a sample for each property on the object except for the configured timestamp property. To customise if a property will be included or excluded, you can assign a delegate to the `IncludeProperty` property on the `TimeSeriesExtractorOptions` instance passed to the extractor. The delegate receives a [JsonPointer](https://github.com/gregsdennis/json-everything/blob/master/JsonPointer/JsonPointer.cs) that contains the path to the property, and returns a Boolean value indicating if the property should be handled or not.
 
 For example:
 
@@ -82,7 +82,7 @@ For example:
 new TimeSeriesExtractorOptions() {
   IncludeProperty = prop => {
     // Check if the current property is allowed
-    switch (prop) {
+    switch (prop.ToString()) {
       case "/temperature":
       case "/pressure":
       case "/humidity":
@@ -207,6 +207,8 @@ The samples emitted would be:
 - `temperatures/1`: `38.1`
 - `temperatures/2`: `37.9`
 
+It is also possible to omit array indexes from the sample keys when recursive mode is enabled; see below for more details.
+
 
 ### A Note on Recursive Mode Template Replacements
 
@@ -229,6 +231,56 @@ If you want to use the local property name in the generated key instead of the f
 Using the above example JSON and a template of `{location}/{$prop-local}`, the key for the nested `temperature` property would be `System A/Subsystem 1/temperature` instead of `System A/Subsystem 1/measurements/temperature`.
 
 > When recursive mode is disabled, the `{$prop}` and `${prop-local}` template placeholders are functionally identical.
+
+
+### Enabling Nested Timestamps
+
+When recursive mode is enabled, the `TimeSeriesExtractorOptions.AllowNestedTimestamps` property controls whether timestamps can be extracted from nested objects. By default, this property is set to `false`. If set to `true`, the timestamp for a sample will be extracted from the first property on the object that matches the configured timestamp property. For example, consider the following JSON:
+
+```json
+{
+  "timestamp": "2021-05-30T09:47:38Z",
+  "temperature": 24.7,
+  "pressure": 1021.3,
+  "humidity": 33.76,
+  "acceleration": {
+    "timestamp": "2021-05-30T09:47:37Z",
+    "x": -0.876,
+    "y": 0.516,
+    "z": -0.044
+  }
+}
+```
+
+If nested timestamps are enabled, the timestamp for the x, y and z acceleration samples would be `2021-05-30T09:47:37Z` instead of `2021-05-30T09:47:38Z`.
+
+
+### Omitting Array Indexes From Sample Keys
+
+When recursive mode is enabled, the `TimeSeriesExtractorOptions.IncludeArrayIndexesInSampleKeys` property controls whether array indexes in the JSON Pointer path are included in the generated sample keys. By default, this property is set to `true`. If set to `false`, the array indexes will be omitted from the generated sample keys. The `TimeSeriesExtractorOptions.IncludeArrayIndexesInSampleKeys` is typically used in conjunction with the `TimeSeriesExtractorOptions.AllowNestedTimestamps` property to allow multiple samples with identical keys but different timestamps to be extracted from an array. For example, consider the following JSON:
+
+```json
+{
+  "device-1": {
+    "data": [
+      {
+        "time": "2021-05-30T09:47:38Z",
+        "temperature": 24.7
+      },
+      {
+        "time": "2021-05-30T09:47:39Z",
+        "temperature": 24.8
+      },
+      {
+        "time": "2021-05-30T09:47:40Z",
+        "temperature": 24.9
+      }
+    ] 
+  }
+}
+```
+
+If array indexes are omitted from the sample keys, three samples would be extracted with a key of `device-1/data/temperature`. With array indexes included in the sample keys, three samples would be extracted with keys of `device-1/data/0/temperature`, `device-1/data/1/temperature` and `device-1/data/2/temperature`.
 
 
 ## Specifying a Custom Processing Start Position
