@@ -1,12 +1,16 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+
+using Json.Pointer;
 
 namespace Jaahas.Json {
 
     /// <summary>
     /// Options for <see cref="TimeSeriesExtractor"/>.
     /// </summary>
-    public class TimeSeriesExtractorOptions {
+    public class TimeSeriesExtractorOptions : IValidatableObject {
 
         /// <summary>
         /// Default <see cref="Template"/> value.
@@ -158,6 +162,46 @@ namespace Jaahas.Json {
         public Func<DateTimeOffset>? GetDefaultTimestamp { get; set; }
 
         /// <summary>
+        /// When both <see cref="AllowNestedTimestamps"/> and <see cref="Recursive"/> are <see langword="true"/>, 
+        /// the <see cref="TimestampProperty"/> will be resolved at every level of the JSON document 
+        /// hierarchy instead of being resolved once against the root element only.
+        /// </summary>
+        /// <remarks>
+        ///   
+        /// <para>
+        ///   This option is useful when processing JSON documents that contain multiple samples, 
+        ///   with each sample specifying its own timestamp.
+        /// </para>
+        /// 
+        /// <para>
+        ///   For example, consider the following JSON:
+        /// </para>
+        /// 
+        /// <code lang="JSON">
+        /// {
+        ///   "data": {
+        ///     "device-1": {
+        ///       "time": "2023-12-01T00:00:00Z",
+        ///       "temperature": 21.7
+        ///     },
+        ///     "device-2": {
+        ///       "time": "2023-12-01T00:30:00Z",
+        ///       "temperature": 22.1
+        ///     }
+        ///   }
+        /// }
+        /// </code>
+        /// 
+        /// <para>
+        ///   By setting <see cref="AllowNestedTimestamps"/> and <see cref="Recursive"/> to <see langword="true"/> 
+        ///   and using <c>/time</c> as the <see cref="TimestampProperty"/>, each <c>temperature</c> 
+        ///   sample will be assigned the timestamp from its sibling <c>time</c> property.
+        /// </para>
+        /// 
+        /// </remarks>
+        public bool AllowNestedTimestamps { get; set; }
+
+        /// <summary>
         /// A delegate that is used to determine if a sample should be emitted for a given 
         /// JSON property.
         /// </summary>
@@ -174,7 +218,7 @@ namespace Jaahas.Json {
         /// </para>
         /// 
         /// </remarks>
-        public Func<string, bool>? IncludeProperty { get; set; }
+        public Func<JsonPointer, bool>? IncludeProperty { get; set; }
 
         /// <summary>
         /// When <see langword="true"/>, JSON properties that contain other objects or arrays will 
@@ -268,7 +312,8 @@ namespace Jaahas.Json {
         ///       The <c>{$prop}</c> placeholder is replaced with the names of every property that 
         ///       was visited in order to arrive at the current property from the root object (e.g. 
         ///       <c>measurements/acceleration/X</c>). If you only require the local, unqualified 
-        ///       property name in your generated keys, you can use the <c>{$prop-local}</c> instead.
+        ///       property name in your generated keys, you can use the <c>{$prop-local}</c> placeholder 
+        ///       instead.
         ///     </description>
         ///   </item>
         /// </list>
@@ -296,9 +341,61 @@ namespace Jaahas.Json {
 
         /// <summary>
         /// When <see cref="Recursive"/> is <see langword="true"/>, <see cref="PathSeparator"/> is 
-        /// used to separate hierarchy levels when processing nested objects and arrays.
+        /// used to separate hierarchy levels when generating sample keys for nested objects and arrays.
         /// </summary>
+        [Required]
         public string PathSeparator { get; set; } = DefaultPathSeparator;
+
+        /// <summary>
+        /// When <see cref="Recursive"/> is <see langword="true"/>, setting <see cref="IncludeArrayIndexesInSampleKeys"/> 
+        /// to <see langword="false"/> will omit array indexes from the keys generated for extracted 
+        /// samples.
+        /// </summary>
+        /// <remarks>
+        /// 
+        /// <para>
+        ///   This property is <see langword="true"/> by default. It can be useful to set it to
+        ///   <see langword="false"/> when a JSON document contains multiple samples for the same 
+        ///   device or instrument, with each sample defining its own timestamp.
+        /// </para>
+        /// 
+        /// <para>
+        ///   For example, consider the following JSON:
+        /// </para>
+        /// 
+        /// <code lang="JSON">
+        /// {
+        ///   "data": {
+        ///     "device-1": [
+        ///       {
+        ///         "time": "2023-12-01T00:00:00Z",
+        ///         "temperature": 21.7
+        ///       },
+        ///       {
+        ///         "time": "2023-12-01T00:30:00Z",
+        ///         "temperature": 22.1
+        ///       }
+        ///     ]
+        ///   }
+        /// }
+        /// </code>
+        /// 
+        /// <para>
+        ///   When <see cref="Recursive"/> and <see cref="AllowNestedTimestamps"/> are <see langword="true"/>, 
+        ///   and <see cref="IncludeArrayIndexesInSampleKeys"/> is <see langword="false"/>, multiple 
+        ///   samples are emitted using <c>data/device-1/temperature</c> as their sample key. If 
+        ///   <see cref="IncludeArrayIndexesInSampleKeys"/> was <see langword="true"/>, the sample 
+        ///   keys would be <c>data/device-1/0/temperature</c> and <c>data/device-1/1/temperature</c>.
+        /// </para>
+        /// 
+        /// <para>
+        ///   Use the <see cref="AllowNestedTimestamps"/> property to allow sample timestamps to 
+        ///   be defined in nested objects.
+        /// </para>
+        /// 
+        /// </remarks>
+        /// <seealso cref="AllowNestedTimestamps"/>
+        public bool IncludeArrayIndexesInSampleKeys { get; set; } = true;
 
 
         /// <summary>
@@ -329,6 +426,14 @@ namespace Jaahas.Json {
             Template = existing.Template;
             TimestampParser = existing.TimestampParser;
             TimestampProperty = existing.TimestampProperty;
+        }
+
+
+        /// <inheritdoc/>
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) {
+            if (string.IsNullOrWhiteSpace(Template)) {
+                yield return new ValidationResult($"The template cannot be null or white space.", new[] { nameof(Template) });
+            }
         }
 
     }
