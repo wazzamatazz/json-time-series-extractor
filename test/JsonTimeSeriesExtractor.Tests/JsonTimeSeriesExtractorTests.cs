@@ -486,7 +486,7 @@ namespace Jaahas.Json.Tests {
 
 
         [TestMethod]
-        public void ShoulAllowCustomTimestampParsing() {
+        public void ShouldAllowCustomTimestampParsing() {
             long secs = 1686559277;
 
             var deviceSample = new {
