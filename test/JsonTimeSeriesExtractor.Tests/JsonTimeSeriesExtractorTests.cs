@@ -37,7 +37,7 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                TimestampProperty = "/" + nameof(deviceSample.Timestamp)
+                TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp))
             }).ToArray();
 
             Assert.AreEqual(13, samples.Length);
@@ -68,7 +68,7 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() { 
-                TimestampProperty = "/" + nameof(deviceSample.Timestamp)
+                TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp))
             }).ToArray();
 
             Assert.AreEqual(13, samples.Length);
@@ -100,7 +100,7 @@ namespace Jaahas.Json.Tests {
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Template = TestContext.TestName + "/{MacAddress}/{$prop}",
-                TimestampProperty = "/" + nameof(deviceSample.Timestamp),
+                TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
             }).ToArray();
 
             Assert.AreEqual(13, samples.Length);
@@ -134,7 +134,7 @@ namespace Jaahas.Json.Tests {
             var guid = Guid.NewGuid();
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Template = TestContext.TestName + "/{MacAddress}/{Uuid}/{$prop}",
-                TimestampProperty = "/" + nameof(deviceSample.Timestamp),
+                TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
                 GetTemplateReplacement = text => { 
                     switch (text.ToUpperInvariant()) {
                         case "UUID":
@@ -175,7 +175,7 @@ namespace Jaahas.Json.Tests {
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Template = TestContext.TestName + "/{MacAddress}/{DataFormat}/{$prop}",
-                TimestampProperty = "/" + nameof(deviceSample.Timestamp),
+                TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
                 IncludeProperty = prop => {
                     if (prop.ToString().Equals("/" + nameof(deviceSample.DataFormat))) {
                         return false;
@@ -217,7 +217,7 @@ namespace Jaahas.Json.Tests {
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Template = TestContext.TestName + "/{MacAddress}/{DataFormat}/{$prop}",
-                TimestampProperty = "/" + nameof(deviceSample.Timestamp),
+                TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
                 IncludeProperty = prop => {
                     if (prop.ToString().Equals("/" + nameof(deviceSample.Temperature))) {
                         return true;
@@ -304,7 +304,7 @@ namespace Jaahas.Json.Tests {
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Template = TestContext.TestName + "/{$prop}",
-                TimestampProperty = "/" + nameof(deviceSample.Timestamp),
+                TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
                 Recursive = true
             }).ToArray();
 
@@ -474,7 +474,7 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                TimestampProperty = "/" + nameof(deviceSample.Timestamp)
+                TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp))
             }).ToArray();
 
             Assert.AreEqual(13, samples.Length);
@@ -509,7 +509,7 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                TimestampProperty = "/" + nameof(deviceSample.Timestamp),
+                TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
                 TimestampParser = element => new DateTimeOffset(1970, 1, 1, 0, 0, 0, TimeSpan.Zero).AddSeconds(element.GetInt64())
             }).ToArray();
 
@@ -549,7 +549,7 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                StartAt = "/data",
+                StartAt = JsonPointer.Parse("/data"),
                 Recursive = true
             }).ToArray();
 
