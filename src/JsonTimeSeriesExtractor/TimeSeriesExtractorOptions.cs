@@ -13,34 +13,14 @@ namespace Jaahas.Json {
     public class TimeSeriesExtractorOptions : IValidatableObject {
 
         /// <summary>
-        /// Default <see cref="Template"/> value.
-        /// </summary>
-        public const string DefaultTemplate = TimeSeriesExtractor.FullPropertyNamePlaceholder;
-
-        /// <summary>
-        /// Default <see cref="TimestampProperty"/> value.
-        /// </summary>
-        public const string DefaultTimestampProperty = "/time";
-
-        /// <summary>
-        /// Default <see cref="PathSeparator"/> value.
-        /// </summary>
-        public const string DefaultPathSeparator = "/";
-
-        /// <summary>
-        /// Default <see cref="MaxDepth"/> value.
-        /// </summary>
-        public const int DefaultMaxDepth = 5;
-
-        /// <summary>
-        /// Specifies a JSON Pointer path that the <see cref="TimeSeriesExtractor"/> should start 
+        /// Specifies a JSON Pointer that the <see cref="TimeSeriesExtractor"/> should start 
         /// processing data from.
         /// </summary>
         /// <remarks>
-        ///   If <see cref="StartAt"/> is <see langword="null"/> or white space, processing will 
-        ///   start from the root of the JSON document.
+        ///   If <see cref="StartAt"/> is <see langword="null"/> start from the root of the JSON 
+        ///   document.
         /// </remarks>
-        public string? StartAt { get; set; }
+        public JsonPointer? StartAt { get; set; }
 
         /// <summary>
         /// The template to use when generating keys for extracted values.
@@ -48,7 +28,7 @@ namespace Jaahas.Json {
         /// <remarks>
         /// 
         /// <para>
-        ///   If <see cref="Template"/> is <see langword="null"/> or white space, <see cref="DefaultTemplate"/> 
+        ///   If <see cref="Template"/> is <see langword="null"/> or white space, <see cref="TimeSeriesExtractorConstants.DefaultTemplate"/> 
         ///   will be used.
         /// </para>
         ///   
@@ -89,7 +69,7 @@ namespace Jaahas.Json {
         /// </para>
         /// 
         /// </remarks>
-        public string Template { get; set; } = DefaultTemplate;
+        public string Template { get; set; } = TimeSeriesExtractorConstants.DefaultTemplate;
 
         /// <summary>
         /// A delegate that accepts a placeholder name referenced in the <see cref="Template"/> and
@@ -109,7 +89,7 @@ namespace Jaahas.Json {
         public bool AllowUnresolvedTemplateReplacements { get; set; } = true;
 
         /// <summary>
-        /// The JSON Pointer path to the property that defines the timestamp for the samples 
+        /// The JSON Pointer to the property that defines the timestamp for the samples 
         /// extracted from the JSON.
         /// </summary>
         /// <remarks>
@@ -130,7 +110,7 @@ namespace Jaahas.Json {
         /// 
         /// </remarks>
         /// <seealso cref="TimestampParser"/>
-        public string? TimestampProperty { get; set; } = DefaultTimestampProperty;
+        public JsonPointer? TimestampProperty { get; set; } = JsonPointer.Parse(TimeSeriesExtractorConstants.DefaultTimestampProperty);
 
         /// <summary>
         /// A delegate that overrides the default timestamp parser.
@@ -212,9 +192,15 @@ namespace Jaahas.Json {
         /// </para>
         /// 
         /// <para>
-        ///   When <see cref="IncludeProperty"/> is <see langword="null"/>, the default behaviour 
-        ///   is to emit a sample for every property except for the property identified as the 
-        ///   timestamp property.
+        ///   Samples are never emitted for timestamp properties , even if they are explicitly 
+        ///   included by <see cref="IncludeProperty"/>.
+        /// </para>
+        /// 
+        /// <para>
+        ///   <see cref="TimeSeriesExtractor.CreatePropertyMatcher(IEnumerable{JsonPointer}?, IEnumerable{JsonPointer}?)"/> 
+        ///   and <see cref="TimeSeriesExtractor.CreatePropertyMatcher(IEnumerable{string}?, IEnumerable{string}?)"/> 
+        ///   can be used to create a compatible delegate for <see cref="IncludeProperty"/> from 
+        ///   lists of JSON pointers to include and/or exclude.
         /// </para>
         /// 
         /// </remarks>
@@ -337,14 +323,14 @@ namespace Jaahas.Json {
         /// </para>
         /// 
         /// </remarks>
-        public int MaxDepth { get; set; } = DefaultMaxDepth;
+        public int MaxDepth { get; set; } = TimeSeriesExtractorConstants.DefaultMaxDepth;
 
         /// <summary>
         /// When <see cref="Recursive"/> is <see langword="true"/>, <see cref="PathSeparator"/> is 
         /// used to separate hierarchy levels when generating sample keys for nested objects and arrays.
         /// </summary>
         [Required]
-        public string PathSeparator { get; set; } = DefaultPathSeparator;
+        public string PathSeparator { get; set; } = TimeSeriesExtractorConstants.DefaultPathSeparator;
 
         /// <summary>
         /// When <see cref="Recursive"/> is <see langword="true"/>, setting <see cref="IncludeArrayIndexesInSampleKeys"/> 
