@@ -402,8 +402,11 @@ namespace Jaahas.Json {
                 return;
             }
 
+            AllowNestedTimestamps = existing.AllowNestedTimestamps;
+            AllowUnresolvedTemplateReplacements = existing.AllowUnresolvedTemplateReplacements;
             GetDefaultTimestamp = existing.GetDefaultTimestamp;
             GetTemplateReplacement = existing.GetTemplateReplacement;
+            IncludeArrayIndexesInSampleKeys = existing.IncludeArrayIndexesInSampleKeys;
             IncludeProperty = existing.IncludeProperty;
             MaxDepth = existing.MaxDepth;
             PathSeparator = existing.PathSeparator;
