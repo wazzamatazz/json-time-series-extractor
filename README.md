@@ -22,7 +22,7 @@ const string json = @"{ ""timestamp"": ""2021-05-30T09:47:38Z"", ""temperature""
 var samples = TimeSeriesExtractor.GetSamples(json).ToArray();
 ```
 
-The JSON document must represent an object or an array of objects. You can customise the extraction behaviour by passing a [TimeSeriesExtractorOptions](./src/JsonTimeSeriesExtractor/TimeSeriesExtractorOptions.cs) object when calling the method.
+The JSON document must represent an object or an array of objects. If the document is an array of objects, each object in the array is processed as if it were a separate JSON document. You can customise the extraction behaviour by passing a [TimeSeriesExtractorOptions](./src/JsonTimeSeriesExtractor/TimeSeriesExtractorOptions.cs) object when calling the method.
 
 
 ## Data Samples
@@ -40,7 +40,7 @@ The `TimestampProperty` on `TimeSeriesExtractorOptions` defines the JSON Pointer
 
 ```csharp
 new TimeSeriesExtractorOptions() {
-  TimestampProperty = "/metadata/utcSampleTime"
+  TimestampProperty = JsonPointer.Parse("/metadata/utcSampleTime")
 }
 ```
 
@@ -74,9 +74,7 @@ new TimeSeriesExtractorOptions() {
 
 ## Selecting the Properties to Handle
 
-By default, `TimeSeriesExtractor` will create a sample for each property on the object except for the configured timestamp property. To customise if a property will be included or excluded, you can assign a delegate to the `IncludeProperty` property on the `TimeSeriesExtractorOptions` instance passed to the extractor. The delegate receives a [JsonPointer](https://github.com/gregsdennis/json-everything/blob/master/JsonPointer/JsonPointer.cs) that contains the path to the property, and returns a Boolean value indicating if the property should be handled or not.
-
-For example:
+By default, `TimeSeriesExtractor` will create a sample for each property on the object except for the configured timestamp property. To customise if a property will be included or excluded, you can assign a delegate to the `IncludeProperty` property on the `TimeSeriesExtractorOptions` instance passed to the extractor. The delegate receives a [JsonPointer](https://github.com/gregsdennis/json-everything/blob/master/JsonPointer/JsonPointer.cs) that contains the path to the property, and returns a Boolean value indicating if the property should be handled or not. For example:
 
 ```csharp
 new TimeSeriesExtractorOptions() {
@@ -91,6 +89,19 @@ new TimeSeriesExtractorOptions() {
         return false;
     }
   }
+}
+```
+
+If you have a known list of properties to include or exclude, you can use one of the `TimeSeriesExtractor.CreatePropertyMatcher` overloads to create a compatible delegate that can be assigned to the `IncludeProperty` property. For example:
+
+```csharp
+var matcher = TimeSeriesExtractor.CreatePropertyMatcher(
+  propertiesToInclude: new[] { "/temperature", "/pressure", "/humidity" },
+  propertiesToExclude: null
+);
+
+var options = new TimeSeriesExtractorOptions() {
+  IncludeProperty = matcher
 }
 ```
 
@@ -235,16 +246,16 @@ Using the above example JSON and a template of `{location}/{$prop-local}`, the k
 
 ### Enabling Nested Timestamps
 
-When recursive mode is enabled, the `TimeSeriesExtractorOptions.AllowNestedTimestamps` property controls whether timestamps can be extracted from nested objects. By default, this property is set to `false`. If set to `true`, the timestamp for a sample will be extracted from the first property on the object that matches the configured timestamp property. For example, consider the following JSON:
+When recursive mode is enabled, the `TimeSeriesExtractorOptions.AllowNestedTimestamps` property controls whether timestamps can be extracted from nested objects. By default, this property is set to `false`, meaning that the timestamp is resolved by evaluating the timestamp property against the root of the JSON document. If set to `true`, the timestamp pointer is evaluated against each ancestor of the property being processed, and the first successful match is used for the sample. For example, consider the following JSON:
 
 ```json
 {
-  "timestamp": "2021-05-30T09:47:38Z",
+  "time": "2021-05-30T09:47:38Z",
   "temperature": 24.7,
   "pressure": 1021.3,
   "humidity": 33.76,
   "acceleration": {
-    "timestamp": "2021-05-30T09:47:37Z",
+    "time": "2021-05-30T09:47:37Z",
     "x": -0.876,
     "y": 0.516,
     "z": -0.044
@@ -252,7 +263,7 @@ When recursive mode is enabled, the `TimeSeriesExtractorOptions.AllowNestedTimes
 }
 ```
 
-If nested timestamps are enabled, the timestamp for the x, y and z acceleration samples would be `2021-05-30T09:47:37Z` instead of `2021-05-30T09:47:38Z`.
+If the configured timestamp property is `/time` and nested timestamps and recursive mode are enabled, the timestamp for the x, y and z acceleration samples would be `2021-05-30T09:47:37Z` instead of `2021-05-30T09:47:38Z`.
 
 
 ### Omitting Array Indexes From Sample Keys
@@ -309,7 +320,7 @@ When processing the above document, it may be preferable to start at the `data` 
 
 ```csharp
 new TimeSeriesExtractorOptions() {
-  StartAt = "/data",
+  StartAt = JsonPointer.Parse("/data"),
   TimestampParser = element => element.ValueKind == JsonValueKind.Number
     ? DateTime.UnixEpoch.AddSeconds(element.GetInt64())
     : null
