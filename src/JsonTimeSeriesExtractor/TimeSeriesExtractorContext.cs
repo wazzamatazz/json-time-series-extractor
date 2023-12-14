@@ -18,11 +18,6 @@ namespace Jaahas.Json {
         internal TimeSeriesExtractorOptions Options { get; }
 
         /// <summary>
-        /// The <see cref="JsonPointer"/> that corresponds to the timestamp property.
-        /// </summary>
-        internal JsonPointer? TimestampPointer { get; }
-
-        /// <summary>
         /// A delegate that determines whether a document property should be extracted as a time series.
         /// </summary>
         internal Func<JsonPointer, bool> IncludeElement { get; }
@@ -52,16 +47,6 @@ namespace Jaahas.Json {
         internal TimeSeriesExtractorContext(TimeSeriesExtractorOptions options) {
             Options = options;
 
-            if (options.TimestampProperty != null) {
-                if (!JsonPointer.TryParse(options.TimestampProperty, out var timestampPointer)) {
-                    throw new ArgumentOutOfRangeException(nameof(options), string.Format(CultureInfo.CurrentCulture, Resources.Error_InvalidJsonPointer, options.TimestampProperty));
-                }
-                TimestampPointer = timestampPointer;
-            }
-            else {
-                TimestampPointer = null;
-            }
-
             ElementStack = new Stack<KeyValuePair<string?, JsonElement>>();
 
             // Assign to local variable first so that it can be referenced in the lambda
@@ -80,10 +65,11 @@ namespace Jaahas.Json {
             // 2. We are running in non-recursive mode and the template is equal to TimeSeriesExtractor.FullPropertyNamePlaceholder
             //    or TimeSeriesExtractor.LocalPropertyNamePlaceholder.
             IsDefaultSampleKeyTemplate = Options.Recursive
-                ? string.Equals(Options.Template, TimeSeriesExtractor.FullPropertyNamePlaceholder, StringComparison.Ordinal)
-                : string.Equals(Options.Template, TimeSeriesExtractor.FullPropertyNamePlaceholder, StringComparison.Ordinal) || string.Equals(Options.Template, TimeSeriesExtractor.LocalPropertyNamePlaceholder, StringComparison.Ordinal);
+                ? string.Equals(Options.Template, TimeSeriesExtractorConstants.FullPropertyNamePlaceholder, StringComparison.Ordinal)
+                : string.Equals(Options.Template, TimeSeriesExtractorConstants.FullPropertyNamePlaceholder, StringComparison.Ordinal) || string.Equals(Options.Template, TimeSeriesExtractorConstants.LocalPropertyNamePlaceholder, StringComparison.Ordinal);
 
             IncludeElement = p => {
+                // Never include the timestamp property for the current document level.
                 var ts = timestampStack.Peek();
                 if (ts.Pointer != null && p.Equals(ts.Pointer)) {
                     return false;
