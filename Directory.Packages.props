@@ -5,7 +5,7 @@
     <NoWarn>NU1507;$(NoWarn)</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="JsonPointer.Net" Version="3.2.2" />
+    <PackageVersion Include="JsonPointer.Net" Version="3.3.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageVersion Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
