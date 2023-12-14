@@ -14,22 +14,113 @@ namespace Jaahas.Json {
     /// Utility class for extracting key-timestamp-value time series data from JSON objects.
     /// </summary>
     /// <seealso cref="TimeSeriesExtractorOptions"/>
-    public sealed class TimeSeriesExtractor {
+    public sealed partial class TimeSeriesExtractor {
 
+#if NET8_0_OR_GREATER
         /// <summary>
-        /// Template placeholder for the full JSON Pointer path to a property.
+        /// Gets a regular expression matcher for JSON property name references in sample key templates.
         /// </summary>
-        public const string FullPropertyNamePlaceholder = "{$prop}";
+        /// <returns>
+        ///   A <see cref="Regex"/> instance.
+        /// </returns>
+        [GeneratedRegex("@\"\\{(?<property>[^\\}]+?)\\}\"", RegexOptions.Singleline)]
+        private static partial Regex GetSampleKeyTemplateMatcher();
 
-        /// <summary>
-        /// Template placeholder for the local property name only.
-        /// </summary>
-        public const string LocalPropertyNamePlaceholder = "{$prop-local}";
-
+#else
         /// <summary>
         /// Matches JSON property name references in sample key templates.
         /// </summary>
         private static readonly Regex s_sampleKeyTemplateMatcher = new Regex(@"\{(?<property>[^\}]+?)\}", RegexOptions.Singleline);
+
+        /// <summary>
+        /// Gets a regular expression matcher for JSON property name references in sample key templates.
+        /// </summary>
+        /// <returns>
+        ///   A <see cref="Regex"/> instance.
+        /// </returns>
+        private static Regex GetSampleKeyTemplateMatcher() => s_sampleKeyTemplateMatcher;
+#endif
+
+        /// <summary>
+        /// Creates a property matcher function compatible with <see cref="TimeSeriesExtractorOptions.IncludeProperty"/> 
+        /// that includes and/or excludes the specified properties.
+        /// </summary>
+        /// <param name="propertiesToInclude">
+        ///   The JSON pointers to properties to include. If not <see langword="null"/>, only 
+        ///   properties that match an entry in this list will be included. Otherwise, properties 
+        ///   will be included unless they match an entry in <paramref name="propertiesToExclude"/>.
+        /// </param>
+        /// <param name="propertiesToExclude">
+        ///   The JSON pointers to properties to exclude.
+        /// </param>
+        /// <returns>
+        ///   A function that returns <see langword="true"/> if a <see cref="TimeSeriesSample"/> 
+        ///   should be generated for the specified property or <see langword="false"/> otherwise.
+        /// </returns>
+        public static Func<JsonPointer, bool> CreatePropertyMatcher(IEnumerable<JsonPointer>? propertiesToInclude, IEnumerable<JsonPointer>? propertiesToExclude) {
+            return (pointer) => {
+                // Apply exclusion rules first.
+                if (propertiesToExclude != null) {
+                    foreach (var exclude in propertiesToExclude) {
+                        if (exclude == null) {
+                            continue;
+                        }
+
+                        if (exclude.Equals(pointer)) {
+                            return false;
+                        }
+                    }
+                }
+
+                // If inclusion rules are specified, only include properties that match.
+                if (propertiesToInclude != null) {
+                    foreach (var include in propertiesToInclude) {
+                        if (include == null) {
+                            continue;
+                        }
+
+                        if (include.Equals(pointer)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                // Fallback to including all properties.
+                return true;
+            };
+        }
+
+
+        /// <summary>
+        /// Creates a property matcher function compatible with <see cref="TimeSeriesExtractorOptions.IncludeProperty"/> 
+        /// that includes and/or excludes the specified properties.
+        /// </summary>
+        /// <param name="propertiesToInclude">
+        ///   The JSON pointers to properties to include. If not <see langword="null"/>, only 
+        ///   properties that match an entry in this list will be included. Otherwise, properties 
+        ///   will be included unless they match an entry in <paramref name="propertiesToExclude"/>.
+        /// </param>
+        /// <param name="propertiesToExclude">
+        ///   The JSON pointers to properties to exclude.
+        /// </param>
+        /// <returns>
+        ///   A function that returns <see langword="true"/> if a <see cref="TimeSeriesSample"/> 
+        ///   should be generated for the specified property or <see langword="false"/> otherwise.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        ///   Any entry in <paramref name="propertiesToInclude"/> or <paramref name="propertiesToExclude"/> 
+        ///   is <see langword="null"/>.
+        /// </exception>
+        /// <exception cref="PointerParseException">
+        ///   Any entry in <paramref name="propertiesToInclude"/> or <paramref name="propertiesToExclude"/> 
+        ///   is not a valid JSON pointer.
+        /// </exception>
+        public static Func<JsonPointer, bool> CreatePropertyMatcher(IEnumerable<string>? propertiesToInclude, IEnumerable<string>? propertiesToExclude) {
+            var includes = propertiesToInclude?.Select(JsonPointer.Parse)?.ToArray();
+            var excludes = propertiesToExclude?.Select(JsonPointer.Parse)?.ToArray();
+            return CreatePropertyMatcher(includes, excludes);
+        }
 
 
         /// <summary>
@@ -83,11 +174,7 @@ namespace Jaahas.Json {
             }
 
             if (options.StartAt != null) {
-                if (!JsonPointer.TryParse(options.StartAt, out var startAt)) {
-                    throw new ArgumentOutOfRangeException(nameof(options), string.Format(CultureInfo.CurrentCulture, Resources.Error_InvalidJsonPointer, options.StartAt));
-                }
-
-                var newElement = startAt!.Evaluate(element);
+                var newElement = options.StartAt!.Evaluate(element);
                 if (newElement == null) {
                     yield break;
                 }
@@ -127,7 +214,7 @@ namespace Jaahas.Json {
 
             ParsedTimestamp defaultTimestamp;
 
-            if (context.TimestampPointer == null || !TryGetTimestamp(element, context.TimestampPointer, context.Options, out var sampleTime)) {
+            if (context.Options.TimestampProperty == null || !TryGetTimestamp(element, context.Options.TimestampProperty, context.Options, out var sampleTime)) {
                 var ts = options.GetDefaultTimestamp?.Invoke();
                 if (ts == null) {
                     defaultTimestamp = new ParsedTimestamp(DateTimeOffset.UtcNow, TimestampSource.CurrentTime, null);
@@ -137,7 +224,7 @@ namespace Jaahas.Json {
                 }
             }
             else {
-                defaultTimestamp = new ParsedTimestamp(sampleTime, TimestampSource.Document, context.TimestampPointer);
+                defaultTimestamp = new ParsedTimestamp(sampleTime, TimestampSource.Document, context.Options.TimestampProperty);
             }
             context.TimestampStack.Push(defaultTimestamp);
 
@@ -214,8 +301,8 @@ namespace Jaahas.Json {
                 switch (currentElement.Value.ValueKind) {
                     case JsonValueKind.Object:
                         var popTimestamp = false;
-                        if (context.Options.AllowNestedTimestamps && context.TimestampPointer != null && TryGetTimestamp(currentElement.Value, context.TimestampPointer, context.Options, out var sampleTime)) {
-                            context.TimestampStack.Push(new ParsedTimestamp(sampleTime, TimestampSource.Document, pointer.Combine(context.TimestampPointer)));
+                        if (context.Options.AllowNestedTimestamps && context.Options.TimestampProperty != null && TryGetTimestamp(currentElement.Value, context.Options.TimestampProperty, context.Options, out var sampleTime)) {
+                            context.TimestampStack.Push(new ParsedTimestamp(sampleTime, TimestampSource.Document, pointer.Combine(context.Options.TimestampProperty)));
                             popTimestamp = true;
                         }
 
@@ -371,7 +458,7 @@ namespace Jaahas.Json {
                 }
 
                 if (options.IncludeArrayIndexesInSampleKeys) {
-                    return string.Equals(options.PathSeparator, TimeSeriesExtractorOptions.DefaultPathSeparator, StringComparison.Ordinal)
+                    return string.Equals(options.PathSeparator, TimeSeriesExtractorConstants.DefaultPathSeparator, StringComparison.Ordinal)
                         ? pointer.ToString().TrimStart('/')
                         : pointer.ToString().TrimStart('/').Replace("/", options.PathSeparator);
                 }
@@ -399,7 +486,7 @@ namespace Jaahas.Json {
                 return elementStackInHierarchyOrder;
             }
 
-            return s_sampleKeyTemplateMatcher.Replace(options.Template, m => {
+            return GetSampleKeyTemplateMatcher().Replace(options.Template, m => {
                 var pName = m.Groups["property"].Value;
 
                 if (string.Equals(pName, "$prop", StringComparison.Ordinal) || string.Equals(pName, "$prop-local", StringComparison.Ordinal)) {
