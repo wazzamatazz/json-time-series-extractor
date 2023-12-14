@@ -23,7 +23,7 @@ namespace Jaahas.Json {
         /// <returns>
         ///   A <see cref="Regex"/> instance.
         /// </returns>
-        [GeneratedRegex("@\"\\{(?<property>[^\\}]+?)\\}\"", RegexOptions.Singleline)]
+        [GeneratedRegex(@"\{(?<property>[^\}]+?)\}", RegexOptions.Singleline)]
         private static partial Regex GetSampleKeyTemplateMatcher();
 
 #else
