@@ -25,7 +25,7 @@ namespace Jaahas.Json {
         /// <summary>
         /// The stack of JSON elements that are currently being processed.
         /// </summary>
-        internal Stack<KeyValuePair<string?, JsonElement>> ElementStack { get; }
+        internal Stack<ElementStackEntry> ElementStack { get; }
 
         /// <summary>
         /// The stack of timestamps that are currently being processed.
@@ -47,7 +47,7 @@ namespace Jaahas.Json {
         internal TimeSeriesExtractorContext(TimeSeriesExtractorOptions options) {
             Options = options;
 
-            ElementStack = new Stack<KeyValuePair<string?, JsonElement>>();
+            ElementStack = new Stack<ElementStackEntry>();
 
             // Assign to local variable first so that it can be referenced in the lambda
             // expression below.
