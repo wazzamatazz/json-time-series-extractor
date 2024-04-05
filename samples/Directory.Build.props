@@ -8,7 +8,7 @@
   
   <PropertyGroup>
     <IsPackable>false</IsPackable>
-    <SignOutput>false</SignOutput>
+    <IsSignable>false</IsSignable>
     <DeterministicSourcePaths>false</DeterministicSourcePaths>
     <IncludeDevelopmentPackages>false</IncludeDevelopmentPackages>
   </PropertyGroup>

@@ -137,7 +137,7 @@ namespace Jaahas.Json {
         ///   string.
         /// </param>
         /// <returns>
-        ///   An <see cref="IEnumerable{Sample}"/> that will emit the parsed samples.
+        ///   An <see cref="IEnumerable{TimeSeriesSample}"/> that will emit the parsed samples.
         /// </returns>
         public static IEnumerable<TimeSeriesSample> GetSamples(string json, TimeSeriesExtractorOptions? options = null, JsonSerializerOptions? serializerOptions = null) {
             var element = JsonSerializer.Deserialize<JsonElement>(json, serializerOptions);
@@ -155,7 +155,7 @@ namespace Jaahas.Json {
         ///   The options for extraction.
         /// </param>
         /// <returns>
-        ///   An <see cref="IEnumerable{Sample}"/> that will emit the parsed samples.
+        ///   An <see cref="IEnumerable{TimeSeriesSample}"/> that will emit the parsed samples.
         /// </returns>
         /// <remarks>
         ///   <paramref name="element"/> must have a <see cref="JsonValueKind"/> of <see cref="JsonValueKind.Object"/> 
@@ -182,9 +182,36 @@ namespace Jaahas.Json {
                 element = newElement.Value;
             }
 
+            foreach (var value in GetSamplesFromRootElement(element, options)) {
+                yield return value;
+            }
+        }
+
+
+        /// <summary>
+        /// Extracts samples from the specified root JSON element.
+        /// </summary>
+        /// <param name="element">
+        ///   The root JSON element.
+        /// </param>
+        /// <param name="options">
+        ///   The options for extraction.
+        /// </param>
+        /// <returns>
+        ///   An <see cref="IEnumerable{TimeSeriesSample}"/> that will emit the parsed samples.
+        /// </returns>
+        /// <remarks>
+        ///   <paramref name="element"/> must have a <see cref="JsonValueKind"/> of <see cref="JsonValueKind.Object"/> 
+        ///   or <see cref="JsonValueKind.Array"/>.
+        /// </remarks>
+        /// <exception cref="ValidationException">
+        ///   <paramref name="options"/> is not valid.
+        /// </exception>
+        /// <seealso cref="TimeSeriesExtractorOptions"/>
+        private static IEnumerable<TimeSeriesSample> GetSamplesFromRootElement(JsonElement element, TimeSeriesExtractorOptions options) {
             if (element.ValueKind == JsonValueKind.Array) {
                 foreach (var item in element.EnumerateArray()) {
-                    foreach (var value in GetSamples(item, options)) {
+                    foreach (var value in GetSamplesFromRootElement(item, options)) {
                         yield return value;
                     }
                 }
@@ -228,10 +255,10 @@ namespace Jaahas.Json {
             }
             context.TimestampStack.Push(defaultTimestamp);
 
-            context.ElementStack.Push(new KeyValuePair<string?, JsonElement>(null, element));
+            context.ElementStack.Push(new ElementStackEntry(null, element, false));
 
             foreach (var prop in element.EnumerateObject()) {
-                context.ElementStack.Push(new KeyValuePair<string?, JsonElement>(prop.Name, prop.Value));
+                context.ElementStack.Push(new ElementStackEntry(prop.Name, prop.Value, false));
 
                 foreach (var val in GetSamplesCore(context, 1)) {
                     yield return val;
@@ -292,27 +319,24 @@ namespace Jaahas.Json {
                 }
 
                 var timestamp = context.TimestampStack.Peek();
-                yield return BuildSampleFromJsonValue(timestamp.Timestamp, timestamp.Source, key, currentElement.Value);
+                yield return BuildSampleFromJsonValue(timestamp.Timestamp, timestamp.Source, key, currentElement.Element);
             }
             else {
-                // We have doing recursive processing and have not exceeded the maximum recursion
+                // We are doing recursive processing and have not exceeded the maximum recursion
                 // depth, so continue as normal.
 
-                switch (currentElement.Value.ValueKind) {
+                switch (currentElement.Element.ValueKind) {
                     case JsonValueKind.Object:
                         var popTimestamp = false;
-                        if (context.Options.AllowNestedTimestamps && context.Options.TimestampProperty != null && TryGetTimestamp(currentElement.Value, context.Options.TimestampProperty, context.Options, out var sampleTime)) {
+                        if (context.Options.AllowNestedTimestamps && context.Options.TimestampProperty != null && TryGetTimestamp(currentElement.Element, context.Options.TimestampProperty, context.Options, out var sampleTime)) {
                             context.TimestampStack.Push(new ParsedTimestamp(sampleTime, TimestampSource.Document, pointer.Combine(context.Options.TimestampProperty)));
                             popTimestamp = true;
                         }
 
-                        foreach (var item in currentElement.Value.EnumerateObject()) {
-                            context.ElementStack.Push(new KeyValuePair<string?, JsonElement>(item.Name, item.Value));
+                        foreach (var item in currentElement.Element.EnumerateObject()) {
+                            context.ElementStack.Push(new ElementStackEntry(item.Name, item.Value, false));
 
-                            foreach (var val in GetSamplesCore(
-                                context,
-                                currentRecursionDepth + 1
-                            )) {
+                            foreach (var val in GetSamplesCore(context, currentRecursionDepth + 1)) {
                                 yield return val;
                             }
 
@@ -326,15 +350,12 @@ namespace Jaahas.Json {
                     case JsonValueKind.Array:
                         var index = -1;
 
-                        foreach (var item in currentElement.Value.EnumerateArray()) {
+                        foreach (var item in currentElement.Element.EnumerateArray()) {
                             ++index;
 
-                            context.ElementStack.Push(new KeyValuePair<string?, JsonElement>(index.ToString(), item));
+                            context.ElementStack.Push(new ElementStackEntry(index.ToString(CultureInfo.InvariantCulture), item, true));
 
-                            foreach (var val in GetSamplesCore(
-                                context,
-                                currentRecursionDepth + 1
-                            )) {
+                            foreach (var val in GetSamplesCore(context, currentRecursionDepth + 1)) {
                                 yield return val;
                             }
 
@@ -346,23 +367,27 @@ namespace Jaahas.Json {
                             yield break;
                         }
 
-                        string key;
-
-                        try {
-                            key = BuildSampleKeyFromTemplate(
-                                context.Options,
-                                pointer,
-                                context.ElementStack,
-                                context.IsDefaultSampleKeyTemplate
-                            );
+                        var sample = BuildSample(pointer, currentElement.Element);
+                        if (sample.HasValue) {
+                            yield return sample.Value;
                         }
-                        catch (InvalidOperationException) {
-                            break;
-                        }
-
-                        var timestamp = context.TimestampStack.Peek();
-                        yield return BuildSampleFromJsonValue(timestamp.Timestamp, timestamp.Source, key, currentElement.Value);
                         break;
+                }
+            }
+
+            TimeSeriesSample? BuildSample(JsonPointer pointer, JsonElement element) {
+                try {
+                    var key = BuildSampleKeyFromTemplate(
+                        context.Options,
+                        pointer,
+                        context.ElementStack,
+                        context.IsDefaultSampleKeyTemplate);
+
+                    var timestamp = context.TimestampStack.Peek();
+                    return BuildSampleFromJsonValue(timestamp.Timestamp, timestamp.Source, key, element);
+                }
+                catch (InvalidOperationException) {
+                    return null;
                 }
             }
         }
@@ -395,6 +420,7 @@ namespace Jaahas.Json {
             }
 
             var el = pointer.Evaluate(element);
+
             if (el == null) {
                 return false;
             }
@@ -448,10 +474,19 @@ namespace Jaahas.Json {
         private static string BuildSampleKeyFromTemplate(
             TimeSeriesExtractorOptions options,
             JsonPointer pointer,
-            IEnumerable<KeyValuePair<string?, JsonElement>> elementStack,
+            IEnumerable<ElementStackEntry> elementStack,
             bool isDefaultTemplate
             
         ) {
+            ElementStackEntry[] elementStackInHierarchyOrder = null!;
+
+            ElementStackEntry[] GetElementStackInHierarchyOrder() {
+                elementStackInHierarchyOrder ??= options.Recursive
+                    ? elementStack.Reverse().ToArray()
+                    : Array.Empty<ElementStackEntry>();
+                return elementStackInHierarchyOrder;
+            }
+
             string GetFullPropertyName(bool forceLocalName = false) {
                 if (!options.Recursive || forceLocalName) {
                     return pointer.Segments.Last().Value;
@@ -463,9 +498,11 @@ namespace Jaahas.Json {
                         : pointer.ToString().TrimStart('/').Replace("/", options.PathSeparator);
                 }
 
-                // Remove array indexes from the path. An array index is any segment that can be
-                // parsed to an integer.
-                return string.Join(options.PathSeparator, pointer.Segments.Where(x => !int.TryParse(x.Value, out _)).Select(x => x.Value));
+                // Remove array indexes from the path. In order to do this, we construct the key
+                // from the element stack instead of using the pointer directly. This allows us
+                // to skip any elements that are array entries. This ensures that we don't
+                // accidentally omit object properties that use integer values as the property name.
+                return string.Join(options.PathSeparator, GetElementStackInHierarchyOrder().Where(x => x.Key != null && !x.IsArrayItem).Select(x => x.Key));
             }
 
             if (isDefaultTemplate) {
@@ -473,18 +510,9 @@ namespace Jaahas.Json {
                 return GetFullPropertyName();
             }
 
-            var closestObject = elementStack.FirstOrDefault(x => x.Value.ValueKind == JsonValueKind.Object);
+            var closestObject = elementStack.FirstOrDefault(x => x.Element.ValueKind == JsonValueKind.Object);
 
-            KeyValuePair<string?, JsonElement>[] elementStackInHierarchyOrder = null!;
-
-            KeyValuePair<string?, JsonElement>[] GetElementStackInHierarchyOrder() {
-                elementStackInHierarchyOrder ??= options.Recursive
-                    ? options.IncludeArrayIndexesInSampleKeys
-                        ? elementStack.Reverse().ToArray()
-                        : elementStack.Reverse().Where(x => x.Key == null || !int.TryParse(x.Key, out _)).ToArray()
-                    : Array.Empty<KeyValuePair<string?, JsonElement>>();
-                return elementStackInHierarchyOrder;
-            }
+            string GetElementDisplayValue(JsonElement el) => el.ValueKind == JsonValueKind.String ? el.GetString()! : el.GetRawText();
 
             return GetSampleKeyTemplateMatcher().Replace(options.Template, m => {
                 var pName = m.Groups["property"].Value;
@@ -499,13 +527,13 @@ namespace Jaahas.Json {
 
                     var propVals = new List<string>();
                     
-                    foreach (var obj in GetElementStackInHierarchyOrder()) {
-                        if (obj.Value.ValueKind != JsonValueKind.Object) {
-                            continue;
-                        }
+                    foreach (var stackEntry in GetElementStackInHierarchyOrder()) {
+                        if (stackEntry.Element.ValueKind == JsonValueKind.Object) {
+                            if (!stackEntry.Element.TryGetProperty(pName, out var prop)) {
+                                continue;
+                            }
 
-                        if (obj.Value.TryGetProperty(pName, out var prop)) {
-                            propVals.Add(prop.ValueKind == JsonValueKind.String ? prop.GetString()! : prop.GetRawText());
+                            propVals.Add(GetElementDisplayValue(prop));
                         }
                     }
 
@@ -517,8 +545,8 @@ namespace Jaahas.Json {
                     // Non-recursive mode: use the nearest object to the item we are processing to
                     // try and get the referenced property.
 
-                    if (closestObject.Value.ValueKind == JsonValueKind.Object && closestObject.Value.TryGetProperty(pName, out var prop)) {
-                        return prop.ValueKind == JsonValueKind.String ? prop.GetString()! : prop.GetRawText();
+                    if (closestObject.Element.ValueKind == JsonValueKind.Object && closestObject.Element.TryGetProperty(pName, out var prop)) {
+                        return GetElementDisplayValue(prop);
                     }
                 }
 
