@@ -42,51 +42,105 @@ namespace Jaahas.Json {
 #endif
 
         /// <summary>
-        /// Creates a property matcher function compatible with <see cref="TimeSeriesExtractorOptions.IncludeProperty"/> 
-        /// that includes and/or excludes the specified properties.
+        /// Single-level wildcard character in a JSON Pointer path.
         /// </summary>
-        /// <param name="propertiesToInclude">
+        public const string SingleLevelWildcard = "+";
+
+        /// <summary>
+        /// Multi-level wildcard character in a JSON Pointer path.
+        /// </summary>
+        /// <remarks>
+        ///   Multi-level wildcards are only valid in the final segment of a JSON Pointer path.
+        /// </remarks>
+        public const string MultiLevelWildcard = "#";
+
+        /// <summary>
+        /// Single-character wildcard character in a JSON Pointer path.
+        /// </summary>
+        public const string SingleCharacterWildcard = "?";
+
+        /// <summary>
+        /// Multi-character wildcard character in a JSON Pointer path.
+        /// </summary>
+        public const string MultiCharacterWildcard = "*";
+
+
+        /// <summary>
+        /// Creates a property matcher function compatible with <see cref="TimeSeriesExtractorOptions.IncludeProperty"/> 
+        /// that includes and/or excludes properties matching the specified pointers.
+        /// </summary>
+        /// <param name="pointersToInclude">
         ///   The JSON pointers to properties to include. If not <see langword="null"/>, only 
         ///   properties that match an entry in this list will be included. Otherwise, properties 
-        ///   will be included unless they match an entry in <paramref name="propertiesToExclude"/>.
+        ///   will be included unless they match an entry in <paramref name="pointersToExclude"/>.
         /// </param>
-        /// <param name="propertiesToExclude">
+        /// <param name="pointersToExclude">
         ///   The JSON pointers to properties to exclude.
+        /// </param>
+        /// <param name="allowWildcards">
+        ///   Specifies if MQTT-style wildcard patterns are allowed in the specified JSON pointer 
+        ///   paths.
         /// </param>
         /// <returns>
         ///   A function that returns <see langword="true"/> if a <see cref="TimeSeriesSample"/> 
         ///   should be generated for the specified property or <see langword="false"/> otherwise.
         /// </returns>
-        public static Func<JsonPointer, bool> CreatePropertyMatcher(IEnumerable<JsonPointer>? propertiesToInclude, IEnumerable<JsonPointer>? propertiesToExclude) {
-            return (pointer) => {
-                // Apply exclusion rules first.
-                if (propertiesToExclude != null) {
-                    foreach (var exclude in propertiesToExclude) {
-                        if (exclude == null) {
-                            continue;
-                        }
+        /// <remarks>
+        /// 
+        /// <para>
+        ///   When wildcard patterns are enabled via the <paramref name="allowWildcards"/> parameter, 
+        ///   segments in <see cref="JsonPointer"/> instances can specify either pattern match 
+        ///   wildcards (i.e. <c>?</c> for a single-character wildcard, and <c>*</c> for a 
+        ///   multi-character wildcard) or MQTT-style wildcard characters (i.e. <c>+</c> for a 
+        ///   single-level wildcard, and <c>#</c> for a multi-level wildcard).
+        /// </para>
+        /// 
+        /// <para>
+        ///   The two matching styles are mutually exclusive; if a pointer path contains single- 
+        ///   or multi-character wildcard characters the path is assumed to be a pattern match, 
+        ///   and MQTT-style wildcards are treated as literal characters. For example, 
+        ///   <c>/foo/+/bar</c> is treated as an MQTT-style match, but <c>/foo/+/*</c> is treated 
+        ///   as a regular pattern match.
+        /// </para>
+        /// 
+        /// <para>
+        ///   In an MQTT-style match expression, the multi-level wildcard character is only valid 
+        ///   in the final segment of the pointer path. For example, <c>/foo/bar/#</c> is a valid 
+        ///   MQTT match expression, but <c>/foo/#/bar</c> is not.
+        /// </para>
+        /// 
+        /// <para>
+        ///   In an MQTT-style match expression, you cannot specify both wildcard and non-wildcard 
+        ///   characters in the same pointer segment. For example, <c>/foo/bar+/baz</c> is not a 
+        ///   valid MQTT match expression and will be interpreted as a literal JSON Pointer path.
+        /// </para>
+        /// 
+        /// </remarks>
+        public static Func<JsonPointer, bool> CreateJsonPointerMatchDelegate(IEnumerable<JsonPointer>? pointersToInclude, IEnumerable<JsonPointer>? pointersToExclude, bool allowWildcards = false) {
+            Predicate<JsonPointer>? includePredicate = null;
+            Predicate<JsonPointer>? excludePredicate = null;
 
-                        if (exclude.Equals(pointer)) {
-                            return false;
-                        }
-                    }
-                }
+            if (pointersToInclude != null) { 
+                includePredicate = CreateJsonPointerMatchDelegate(pointersToInclude, allowWildcards);
+            }
 
-                // If inclusion rules are specified, only include properties that match.
-                if (propertiesToInclude != null) {
-                    foreach (var include in propertiesToInclude) {
-                        if (include == null) {
-                            continue;
-                        }
+            if (pointersToExclude != null) {
+                excludePredicate = CreateJsonPointerMatchDelegate(pointersToExclude, allowWildcards);
+            }
 
-                        if (include.Equals(pointer)) {
-                            return true;
-                        }
-                    }
+            if (includePredicate == null && excludePredicate == null) {
+                return _ => true;
+            }
+
+            return pointer => {
+                if (excludePredicate != null && excludePredicate.Invoke(pointer)) {
                     return false;
                 }
 
-                // Fallback to including all properties.
+                if (includePredicate != null) {
+                    return includePredicate.Invoke(pointer);
+                }
+
                 return true;
             };
         }
@@ -94,32 +148,197 @@ namespace Jaahas.Json {
 
         /// <summary>
         /// Creates a property matcher function compatible with <see cref="TimeSeriesExtractorOptions.IncludeProperty"/> 
-        /// that includes and/or excludes the specified properties.
+        /// that includes and/or excludes properties matching the specified pointers.
         /// </summary>
-        /// <param name="propertiesToInclude">
-        ///   The JSON pointers to properties to include. If not <see langword="null"/>, only 
+        /// <param name="pointersToInclude">
+        ///   The JSON pointers for properties to include. If not <see langword="null"/>, only 
         ///   properties that match an entry in this list will be included. Otherwise, properties 
-        ///   will be included unless they match an entry in <paramref name="propertiesToExclude"/>.
+        ///   will be included unless they match an entry in <paramref name="pointersToExclude"/>.
         /// </param>
-        /// <param name="propertiesToExclude">
+        /// <param name="pointersToExclude">
         ///   The JSON pointers to properties to exclude.
+        /// </param>
+        /// <param name="allowWildcards">
+        ///   Specifies if MQTT-style wildcard patterns are allowed in the specified JSON pointer 
+        ///   paths.
         /// </param>
         /// <returns>
         ///   A function that returns <see langword="true"/> if a <see cref="TimeSeriesSample"/> 
         ///   should be generated for the specified property or <see langword="false"/> otherwise.
         /// </returns>
         /// <exception cref="ArgumentNullException">
-        ///   Any entry in <paramref name="propertiesToInclude"/> or <paramref name="propertiesToExclude"/> 
+        ///   Any entry in <paramref name="pointersToInclude"/> or <paramref name="pointersToExclude"/> 
         ///   is <see langword="null"/>.
         /// </exception>
         /// <exception cref="PointerParseException">
-        ///   Any entry in <paramref name="propertiesToInclude"/> or <paramref name="propertiesToExclude"/> 
+        ///   Any entry in <paramref name="pointersToInclude"/> or <paramref name="pointersToExclude"/> 
         ///   is not a valid JSON pointer.
         /// </exception>
-        public static Func<JsonPointer, bool> CreatePropertyMatcher(IEnumerable<string>? propertiesToInclude, IEnumerable<string>? propertiesToExclude) {
-            var includes = propertiesToInclude?.Select(JsonPointer.Parse)?.ToArray();
-            var excludes = propertiesToExclude?.Select(JsonPointer.Parse)?.ToArray();
-            return CreatePropertyMatcher(includes, excludes);
+        /// <remarks>
+        /// 
+        /// <para>
+        ///   When wildcard patterns are enabled via the <paramref name="allowWildcards"/> parameter, 
+        ///   segments in <see cref="JsonPointer"/> instances can specify either pattern match 
+        ///   wildcards (i.e. <c>?</c> for a single-character wildcard, and <c>*</c> for a 
+        ///   multi-character wildcard) or MQTT-style wildcard characters (i.e. <c>+</c> for a 
+        ///   single-level wildcard, and <c>#</c> for a multi-level wildcard).
+        /// </para>
+        /// 
+        /// <para>
+        ///   The two matching styles are mutually exclusive; if a pointer path contains single- 
+        ///   or multi-character wildcard characters the path is assumed to be a pattern match, 
+        ///   and MQTT-style wildcards are treated as literal characters. For example, 
+        ///   <c>/foo/+/bar</c> is treated as an MQTT-style match, but <c>/foo/+/*</c> is treated 
+        ///   as a regular pattern match.
+        /// </para>
+        /// 
+        /// <para>
+        ///   In an MQTT-style match expression, the multi-level wildcard character is only valid 
+        ///   in the final segment of the pointer path. For example, <c>/foo/bar/#</c> is a valid 
+        ///   MQTT match expression, but <c>/foo/#/bar</c> is not.
+        /// </para>
+        /// 
+        /// <para>
+        ///   In an MQTT-style match expression, you cannot specify both wildcard and non-wildcard 
+        ///   characters in the same pointer segment. For example, <c>/foo/bar+/baz</c> is not a 
+        ///   valid MQTT match expression and will be interpreted as a literal JSON Pointer path.
+        /// </para>
+        /// 
+        /// </remarks>
+        public static Func<JsonPointer, bool> CreateJsonPointerMatchDelegate(IEnumerable<string>? pointersToInclude, IEnumerable<string>? pointersToExclude, bool allowWildcards = false) {
+            var includes = pointersToInclude?.Select(JsonPointer.Parse)?.ToArray();
+            var excludes = pointersToExclude?.Select(JsonPointer.Parse)?.ToArray();
+            return CreateJsonPointerMatchDelegate(includes, excludes, allowWildcards);
+        }
+
+
+        /// <summary>
+        /// Creates a predicate that tests if a JSON pointer matches against any of the specified JSON pointers.
+        /// </summary>
+        /// <param name="matchPointers">
+        ///   The JSON pointers to match against.
+        /// </param>
+        /// <param name="allowWildcards">
+        ///   Specifies if pattern match or MQTT-style match expressions are allowed in the 
+        ///   <paramref name="matchPointers"/>.
+        /// </param>
+        /// <returns>
+        ///   A predicate that returns <see langword="true"/> if the specified JSON pointer matches 
+        ///   any of the <paramref name="matchPointers"/>.
+        /// </returns>
+        private static Predicate<JsonPointer> CreateJsonPointerMatchDelegate(IEnumerable<JsonPointer> matchPointers, bool allowWildcards) {
+            if (!allowWildcards) {
+                // No wildcards: return a simple predicate that checks for equality.
+                return pointer => matchPointers.Any(x => x != null && x.Equals(pointer));
+            }
+
+            var pointersWithWildcardStatus = matchPointers.Select(x => {
+                var containsPatternMatchWildcard = ContainsPatternMatchWildcard(x);
+                return new {
+                    Pointer = x,
+                    ContainsPatternMatchExpression = containsPatternMatchWildcard,
+                    ContainsMqttMatchExpression = !containsPatternMatchWildcard && (ContainsSingleLevelMqttWildcard(x) || ContainsMultiLevelMqttWildcard(x))
+                };
+            }).ToArray();
+
+            if (pointersWithWildcardStatus.All(x => !x.ContainsPatternMatchExpression && !x.ContainsMqttMatchExpression)) {
+                // No wildcards are present: return a simple predicate that checks for equality.
+                return pointer => matchPointers.Any(x => x != null && x.Equals(pointer));
+            }
+
+            // Wildcards are present: return a more complex predicate that checks for wildcard matches.
+            var predicates = new List<Predicate<JsonPointer>>();
+
+            foreach (var matchPointer in pointersWithWildcardStatus) {
+                if (matchPointer == null) {
+                    continue;
+                }
+
+                if (!matchPointer.ContainsPatternMatchExpression && !matchPointer.ContainsMqttMatchExpression) {
+                    // Pointer does not contain wildcards: add a simple predicate that checks for equality.
+                    predicates.Add(pointer => matchPointer.Equals(pointer));
+                    continue;
+                }
+
+                // Pointer contains wildcards: add a predicate that checks for wildcard matches.
+
+                if (matchPointer.ContainsPatternMatchExpression) {
+                    // Use pattern match wildcards.
+#if NETCOREAPP
+                    var pattern = Regex.Escape(matchPointer.Pointer.ToString())
+                        .Replace(@"\*", ".*", StringComparison.Ordinal)
+                        .Replace(@"\?", ".", StringComparison.Ordinal);
+#else
+                    var pattern = Regex.Escape(matchPointer.Pointer.ToString())
+                        .Replace(@"\*", ".*")
+                        .Replace(@"\?", ".");
+#endif
+
+                    var regex = new Regex($"^{pattern}$", RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
+                    predicates.Add(pointer => regex.IsMatch(pointer.ToString()));
+                    continue;
+                }
+
+                // For each pointer segment, we'll check if that segment is a single-level or
+                // multi-level wildcard.
+                var matchSegments = matchPointer.Pointer.Segments.Reverse().Select((x, i) => new {
+                    Segment = x,
+                    IsSingleLevelWildcard = x.Value.Equals(SingleLevelWildcard, StringComparison.Ordinal),
+                    // Multi-level wildcard is only valid in the final segment, which is at index
+                    // 0 in our reversed segment list.
+                    IsMultiLevelWildcard = i == 0 && x.Value.Equals(MultiLevelWildcard, StringComparison.Ordinal)
+                }).Reverse().ToArray();
+
+                predicates.Add(pointer => {
+                    if (pointer.Segments.Length < matchSegments.Length) {
+                        // The pointer has fewer segments than the match pattern; no match.
+                        return false;
+                    }
+
+                    if (pointer.Segments.Length > matchSegments.Length) {
+                        // The pointer has more segments than the match pattern; no match unless
+                        // the last match segment is a multi-level wildcard.
+                        return matchSegments[matchSegments.Length - 1].IsMultiLevelWildcard;
+                    }
+
+                    for (var i = 0; i < pointer.Segments.Length; i++) {
+                        var pointerSegment = pointer.Segments[i];
+                        var matchSegment = matchSegments[i];
+
+                        if (matchSegment.IsSingleLevelWildcard) {
+                            // Single-level wildcard: match any segment.
+                            continue;
+                        }
+
+                        if (matchSegment.IsMultiLevelWildcard) {
+                            // Multi-level wildcard: match all remaining pointer segments.
+                            break;
+                        }
+
+                        // Check for an exact match between the current pointer segment and match
+                        // segment.
+                        if (!pointerSegment.Equals(matchSegment.Segment)) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                });
+            }
+
+            return predicates.Count == 0 
+                ? _ => true
+                : pointer => predicates.Any(x => x.Invoke(pointer));
+
+            bool ContainsPatternMatchWildcard(JsonPointer p) {
+                var s = p.ToString();
+                return s.Contains(SingleCharacterWildcard) || s.Contains(MultiCharacterWildcard);
+            };
+
+            bool ContainsSingleLevelMqttWildcard(JsonPointer p) => p.Segments.Any(x => x.Value.Equals(SingleLevelWildcard, StringComparison.Ordinal));
+
+            bool ContainsMultiLevelMqttWildcard(JsonPointer p) => p.Segments[p.Segments.Length - 1].Value.Equals(MultiLevelWildcard, StringComparison.Ordinal);
+
         }
 
 
@@ -287,11 +506,6 @@ namespace Jaahas.Json {
         ) {
             var pointer = JsonPointer.Create(context.ElementStack.Where(x => x.Key != null).Reverse().Select(x => PointerSegment.Create(x.Key!)));
 
-            // Check if this property should be included.
-            if (!context.IncludeElement.Invoke(pointer)) {
-                yield break;
-            }
-
             var currentElement = context.ElementStack.Peek();
 
             if (!context.Options.Recursive || (context.Options.MaxDepth > 0 && currentRecursionDepth >= context.Options.MaxDepth)) {
@@ -299,27 +513,12 @@ namespace Jaahas.Json {
                 // depth; build a sample with the current element. When we have exceeded the
                 // maximum recursion depth, the value will be the serialized JSON of the element
                 // if the element is an object or an array.
-                string key = null!;
-                var error = false;
-
-                try {
-                    key = BuildSampleKeyFromTemplate(
-                        context.Options,
-                        pointer,
-                        context.ElementStack,
-                        context.IsDefaultSampleKeyTemplate
-                    );
-                }
-                catch (InvalidOperationException) {
-                    error = true;
-                }
-
-                if (error) {
+                var sample = BuildSample(pointer, currentElement.Element);
+                if (!sample.HasValue) {
                     yield break;
                 }
 
-                var timestamp = context.TimestampStack.Peek();
-                yield return BuildSampleFromJsonValue(timestamp.Timestamp, timestamp.Source, key, currentElement.Element);
+                yield return sample.Value;
             }
             else {
                 // We are doing recursive processing and have not exceeded the maximum recursion
@@ -376,6 +575,11 @@ namespace Jaahas.Json {
             }
 
             TimeSeriesSample? BuildSample(JsonPointer pointer, JsonElement element) {
+                // Check if this element should be included.
+                if (!context.IncludeElement.Invoke(pointer)) {
+                    return null;
+                }
+
                 try {
                     var key = BuildSampleKeyFromTemplate(
                         context.Options,

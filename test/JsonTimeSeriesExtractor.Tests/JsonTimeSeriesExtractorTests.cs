@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 
@@ -176,15 +175,10 @@ namespace Jaahas.Json.Tests {
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Template = TestContext.TestName + "/{MacAddress}/{DataFormat}/{$prop}",
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
-                IncludeProperty = prop => {
-                    if (prop.ToString().Equals("/" + nameof(deviceSample.DataFormat))) {
-                        return false;
-                    }
-                    if (prop.ToString().Equals("/" + nameof(deviceSample.MacAddress))) {
-                        return false;
-                    }
-                    return true;
-                }
+                IncludeProperty = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(null, new[] {
+                    $"/{nameof(deviceSample.DataFormat)}",
+                    $"/{nameof(deviceSample.MacAddress)}"
+                })
             }).ToArray();
 
             Assert.AreEqual(11, samples.Length);
@@ -218,24 +212,181 @@ namespace Jaahas.Json.Tests {
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Template = TestContext.TestName + "/{MacAddress}/{DataFormat}/{$prop}",
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
-                IncludeProperty = prop => {
-                    if (prop.ToString().Equals("/" + nameof(deviceSample.Temperature))) {
-                        return true;
-                    }
-                    if (prop.ToString().Equals("/" + nameof(deviceSample.Humidity))) {
-                        return true;
-                    }
-                    if (prop.ToString().Equals("/" + nameof(deviceSample.Pressure))) {
-                        return true;
-                    }
-                    return false;
-                }
+                IncludeProperty = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new[] {
+                    $"/{nameof(deviceSample.Temperature)}",
+                    $"/{nameof(deviceSample.Humidity)}",
+                    $"/{nameof(deviceSample.Pressure)}"
+                }, null)
             }).ToArray();
 
             Assert.AreEqual(3, samples.Length);
             Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
             Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
             Assert.IsTrue(samples.All(x => x.Key.StartsWith(TestContext.TestName + "/" + deviceSample.MacAddress + "/" + deviceSample.DataFormat)));
+        }
+
+
+        [TestMethod]
+        public void ShouldIncludePropertiesUsingMqttMultiLevelMatch() {
+            var deviceSample = new { 
+                Data = new {
+                    Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
+                    SignalStrength = -75,
+                    DataFormat = 5,
+                    Temperature = 19.3,
+                    Humidity = 37.905,
+                    Pressure = 1013.35,
+                    Acceleration = new {
+                        X = -0.872,
+                        Y = 0.512,
+                        Z = -0.04
+                    },
+                    BatteryVoltage = 3.085,
+                    TxPower = 4,
+                    MovementCounter = 5,
+                    MeasurementSequence = 34425,
+                    MacAddress = "AB:CD:EF:01:23:45"
+                }
+            };
+
+            var json = JsonSerializer.Serialize(deviceSample);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                Recursive = true,
+                TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
+                IncludeProperty = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new[] {
+                    $"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Acceleration)}/#",
+                }, null, allowWildcards: true)
+            }).ToArray();
+
+            Assert.AreEqual(3, samples.Length);
+            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Data.Timestamp.UtcDateTime)));
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.IsTrue(samples.All(x => x.Key.StartsWith("Data/Acceleration/")));
+        }
+
+
+        [TestMethod]
+        public void ShouldIncludePropertiesUsingMqttSingleLevelMatch() {
+            var deviceSample = new {
+                Data = new {
+                    Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
+                    SignalStrength = -75,
+                    DataFormat = 5,
+                    Temperature = 19.3,
+                    Humidity = 37.905,
+                    Pressure = 1013.35,
+                    Acceleration = new {
+                        X = -0.872,
+                        Y = 0.512,
+                        Z = -0.04
+                    },
+                    BatteryVoltage = 3.085,
+                    TxPower = 4,
+                    MovementCounter = 5,
+                    MeasurementSequence = 34425,
+                    MacAddress = "AB:CD:EF:01:23:45"
+                }
+            };
+
+            var json = JsonSerializer.Serialize(deviceSample);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                Recursive = true,
+                TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
+                IncludeProperty = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new[] {
+                    $"/+/+/X",
+                }, null, allowWildcards: true)
+            }).ToArray();
+
+            Assert.AreEqual(1, samples.Length);
+            var sample = samples[0];
+
+            Assert.AreEqual(deviceSample.Data.Timestamp.UtcDateTime, sample.Timestamp.UtcDateTime);
+            Assert.AreEqual(TimestampSource.Document, sample.TimestampSource);
+            Assert.AreEqual("Data/Acceleration/X", sample.Key);
+        }
+
+
+        [TestMethod]
+        public void ShouldIncludePropertiesUsingMultiCharacterPatternMatch() {
+            var deviceSample = new {
+                Data = new {
+                    Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
+                    SignalStrength = -75,
+                    DataFormat = 5,
+                    Temperature = 19.3,
+                    Humidity = 37.905,
+                    Pressure = 1013.35,
+                    Acceleration = new {
+                        X = -0.872,
+                        Y = 0.512,
+                        Z = -0.04
+                    },
+                    BatteryVoltage = 3.085,
+                    TxPower = 4,
+                    MovementCounter = 5,
+                    MeasurementSequence = 34425,
+                    MacAddress = "AB:CD:EF:01:23:45"
+                }
+            };
+
+            var json = JsonSerializer.Serialize(deviceSample);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                Recursive = true,
+                TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
+                IncludeProperty = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new[] {
+                    $"/*/X",
+                }, null, allowWildcards: true)
+            }).ToArray();
+
+            Assert.AreEqual(1, samples.Length);
+            var sample = samples[0];
+
+            Assert.AreEqual(deviceSample.Data.Timestamp.UtcDateTime, sample.Timestamp.UtcDateTime);
+            Assert.AreEqual(TimestampSource.Document, sample.TimestampSource);
+            Assert.AreEqual("Data/Acceleration/X", sample.Key);
+        }
+
+
+        [TestMethod]
+        public void ShouldIncludePropertiesUsingSingleCharacterPatternMatch() {
+            var deviceSample = new {
+                Data = new {
+                    Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
+                    SignalStrength = -75,
+                    DataFormat = 5,
+                    Temperature = 19.3,
+                    Humidity = 37.905,
+                    Pressure = 1013.35,
+                    Acceleration = new {
+                        X = -0.872,
+                        Y = 0.512,
+                        Z = -0.04
+                    },
+                    BatteryVoltage = 3.085,
+                    TxPower = 4,
+                    MovementCounter = 5,
+                    MeasurementSequence = 34425,
+                    MacAddress = "AB:CD:EF:01:23:45"
+                }
+            };
+
+            var json = JsonSerializer.Serialize(deviceSample);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                Recursive = true,
+                TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
+                IncludeProperty = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new[] {
+                    $"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Acceleration)}/?",
+                }, null, allowWildcards: true)
+            }).ToArray();
+
+            Assert.AreEqual(3, samples.Length);
+            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Data.Timestamp.UtcDateTime)));
+            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.IsTrue(samples.All(x => x.Key.StartsWith("Data/Acceleration/")));
         }
 
 
