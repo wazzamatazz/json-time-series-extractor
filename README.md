@@ -124,7 +124,7 @@ var options = new TimeSeriesExtractorOptions() {
 ```
 
 
-### Pattern Matching using MQTT-Style Match Expressions
+### Pattern Matching using MQTT-style Match Expressions
 
 In addition to matching using wildcard characters, `TimeSeriesExtractor.CreateJsonPointerMatchDelegate` also supports using MQTT-style match expressions in JSON pointers when the `allowWildcards` parameter is `true`.
 
