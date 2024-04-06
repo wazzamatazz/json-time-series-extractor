@@ -92,18 +92,71 @@ new TimeSeriesExtractorOptions() {
 }
 ```
 
-If you have a known list of properties to include or exclude, you can use one of the `TimeSeriesExtractor.CreatePropertyMatcher` overloads to create a compatible delegate that can be assigned to the `IncludeProperty` property. For example:
+If you have a known list of properties to include or exclude, you can use one of the `TimeSeriesExtractor.CreateJsonPointerMatchDelegate` method overloads to create a compatible delegate that can be assigned to the `IncludeProperty` property. For example:
 
 ```csharp
-var matcher = TimeSeriesExtractor.CreatePropertyMatcher(
-  propertiesToInclude: new[] { "/temperature", "/pressure", "/humidity" },
-  propertiesToExclude: null
+var matcher = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(
+  pointersToInclude: new[] { "/temperature", "/pressure", "/humidity" },
+  pointersToExclude: null
 );
 
 var options = new TimeSeriesExtractorOptions() {
   IncludeProperty = matcher
 }
 ```
+
+### Pattern Matching using Wildcards
+
+`TimeSeriesExtractor.CreateJsonPointerMatchDelegate` supports using single- and multi-character wildcards (`?` and `*` respectively) in JSON pointers when the `allowWildcards` parameter is `true`. Note that the pattern must still be a valid JSON Pointer.
+
+Example: include all properties that are descendents of `/data`:
+
+```csharp
+var matcher = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(
+  pointersToInclude: new[] { "/data/*" },
+  pointersToExclude: null,
+  allowWildcards: true
+);
+
+var options = new TimeSeriesExtractorOptions() {
+  IncludeProperty = matcher
+}
+```
+
+
+### Pattern Matching using MQTT-Style Match Expressions
+
+In addition to matching using wildcard characters, `TimeSeriesExtractor.CreateJsonPointerMatchDelegate` also supports using MQTT-style match expressions in JSON pointers when the `allowWildcards` parameter is `true`.
+
+Example 1: include all properties that are descendents of `/data/instrument-1`:
+
+```csharp
+var matcher = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(
+  pointersToInclude: new[] { "/data/instrument-1/#" },
+  pointersToExclude: null,
+  allowWildcards: true
+);
+
+var options = new TimeSeriesExtractorOptions() {
+  IncludeProperty = matcher
+}
+```
+
+Example 2: include all `temperature` properties that are grandchildren of `/data`:
+
+```csharp
+var matcher = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(
+  pointersToInclude: new[] { "/data/+/temperature" },
+  pointersToExclude: null,
+  allowWildcards: true
+);
+
+var options = new TimeSeriesExtractorOptions() {
+  IncludeProperty = matcher
+}
+```
+
+Note that, if the JSON pointer includes single- or multi-character wildcards, regular pattern matching will always be used instead of MQTT-style match expressions.
 
 
 ## Data Sample Keys
