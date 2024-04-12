@@ -175,9 +175,11 @@ namespace Jaahas.Json.Tests {
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Template = TestContext.TestName + "/{MacAddress}/{DataFormat}/{$prop}",
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
-                IncludeProperty = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(null, new[] {
-                    $"/{nameof(deviceSample.DataFormat)}",
-                    $"/{nameof(deviceSample.MacAddress)}"
+                CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
+                    PointersToExclude = new JsonPointerMatch[] {
+                        $"/{nameof(deviceSample.DataFormat)}",
+                        $"/{nameof(deviceSample.MacAddress)}"
+                    }
                 })
             }).ToArray();
 
@@ -212,11 +214,13 @@ namespace Jaahas.Json.Tests {
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Template = TestContext.TestName + "/{MacAddress}/{DataFormat}/{$prop}",
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
-                IncludeProperty = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new[] {
-                    $"/{nameof(deviceSample.Temperature)}",
-                    $"/{nameof(deviceSample.Humidity)}",
-                    $"/{nameof(deviceSample.Pressure)}"
-                }, null)
+                CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() {
+                    PointersToInclude = new JsonPointerMatch[] {
+                        $"/{nameof(deviceSample.Temperature)}",
+                        $"/{nameof(deviceSample.Humidity)}",
+                        $"/{nameof(deviceSample.Pressure)}"
+                    }
+                })
             }).ToArray();
 
             Assert.AreEqual(3, samples.Length);
@@ -254,9 +258,12 @@ namespace Jaahas.Json.Tests {
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Recursive = true,
                 TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
-                IncludeProperty = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new[] {
-                    $"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Acceleration)}/#",
-                }, null, allowWildcards: true)
+                CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
+                    AllowWildcardExpressions = true,
+                    PointersToInclude = new JsonPointerMatch[] {
+                        $"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Acceleration)}/#",
+                    }
+                })
             }).ToArray();
 
             Assert.AreEqual(3, samples.Length);
@@ -294,9 +301,12 @@ namespace Jaahas.Json.Tests {
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Recursive = true,
                 TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
-                IncludeProperty = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new[] {
-                    $"/+/+/X",
-                }, null, allowWildcards: true)
+                CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
+                    AllowWildcardExpressions = true,
+                    PointersToInclude = new JsonPointerMatch[] {
+                        $"/+/+/X",
+                    }
+                })
             }).ToArray();
 
             Assert.AreEqual(1, samples.Length);
@@ -336,9 +346,12 @@ namespace Jaahas.Json.Tests {
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Recursive = true,
                 TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
-                IncludeProperty = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new[] {
-                    $"/*/X",
-                }, null, allowWildcards: true)
+                CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
+                    AllowWildcardExpressions = true,
+                    PointersToInclude = new JsonPointerMatch[] {
+                        "*/X",
+                    }
+                })
             }).ToArray();
 
             Assert.AreEqual(1, samples.Length);
@@ -378,9 +391,12 @@ namespace Jaahas.Json.Tests {
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Recursive = true,
                 TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
-                IncludeProperty = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new[] {
-                    $"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Acceleration)}/?",
-                }, null, allowWildcards: true)
+                CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
+                    AllowWildcardExpressions = true,
+                    PointersToInclude = new JsonPointerMatch[] {
+                        $"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Acceleration)}/?",
+                    }
+                })
             }).ToArray();
 
             Assert.AreEqual(3, samples.Length);
@@ -481,7 +497,7 @@ namespace Jaahas.Json.Tests {
                 Template = "{location}/{$prop}",
                 PathSeparator = "/",
                 Recursive = true,
-                IncludeProperty = prop => !prop.Segments.Last().Value.Equals("location")
+                CanProcessElement = (_, prop, _) => !prop.Segments.Last().Value.Equals("location")
             }).ToArray();
 
             Assert.AreEqual(1, samples.Length);
@@ -506,7 +522,7 @@ namespace Jaahas.Json.Tests {
                 Template = "{location}/{$prop-local}",
                 PathSeparator = "/",
                 Recursive = true,
-                IncludeProperty = prop => !prop.Segments.Last().Value.Equals("location")
+                CanProcessElement = (_, prop, _) => !prop.Segments.Last().Value.Equals("location")
             }).ToArray();
 
             Assert.AreEqual(1, samples.Length);
