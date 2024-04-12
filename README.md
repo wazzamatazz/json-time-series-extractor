@@ -40,7 +40,7 @@ The `TimestampProperty` on `TimeSeriesExtractorOptions` defines the JSON Pointer
 
 ```csharp
 new TimeSeriesExtractorOptions() {
-  TimestampProperty = JsonPointer.Parse("/metadata/utcSampleTime")
+  TimestampProperty = "/metadata/utcSampleTime"
 }
 ```
 
@@ -74,13 +74,13 @@ new TimeSeriesExtractorOptions() {
 
 ## Selecting the Properties to Handle
 
-By default, `TimeSeriesExtractor` will create a sample for each property on the object except for the configured timestamp property. To customise if a property will be included or excluded, you can assign a delegate to the `IncludeProperty` property on the `TimeSeriesExtractorOptions` instance passed to the extractor. The delegate receives a [JsonPointer](https://github.com/gregsdennis/json-everything/blob/master/JsonPointer/JsonPointer.cs) that contains the path to the property, and returns a Boolean value indicating if the property should be handled or not. For example:
+By default, `TimeSeriesExtractor` will create a sample for each property on the object except for the configured timestamp property. To customise if a JSON element will be processed or not, you can assign a delegate to the `CanProcessElement` property on the `TimeSeriesExtractorOptions` instance passed to the extractor. The delegate returns a Boolean value indicating if the element should be processed. For example:
 
 ```csharp
 new TimeSeriesExtractorOptions() {
-  IncludeProperty = prop => {
-    // Check if the current property is allowed
-    switch (prop.ToString()) {
+  CanProcessElement = (TimeSeriesExtractorContext context, JsonPonter pointer, JsonElement element) => {
+    // Check if the current pointer is allowed
+    switch (pointer.ToString()) {
       case "/temperature":
       case "/pressure":
       case "/humidity":
@@ -92,67 +92,76 @@ new TimeSeriesExtractorOptions() {
 }
 ```
 
-If you have a known list of properties to include or exclude, you can use one of the `TimeSeriesExtractor.CreateJsonPointerMatchDelegate` method overloads to create a compatible delegate that can be assigned to the `IncludeProperty` property. For example:
+If you have a known list of properties to include or exclude, you can use one of the `TimeSeriesExtractor.CreateJsonPointerMatchDelegate` method overloads to create a compatible delegate that can be assigned to the `CanProcessElement` property. For example:
 
 ```csharp
-var matcher = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(
-  pointersToInclude: new[] { "/temperature", "/pressure", "/humidity" },
-  pointersToExclude: null
-);
+var matcher = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() {
+    PointersToInclude = ["/temperature", "/pressure", "/humidity"]
+});
 
 var options = new TimeSeriesExtractorOptions() {
-  IncludeProperty = matcher
+  CanProcessElement = matcher
 }
 ```
 
 ### Pattern Matching using Wildcards
 
-`TimeSeriesExtractor.CreateJsonPointerMatchDelegate` supports using single- and multi-character wildcards (`?` and `*` respectively) in JSON pointers when the `allowWildcards` parameter is `true`. Note that the pattern must still be a valid JSON Pointer.
+`TimeSeriesExtractor.CreateJsonPointerMatchDelegate` supports using single- and multi-character wildcards (`?` and `*` respectively) in JSON pointers when the `TimeSeriesExtractorOptions.AllowWildcardExpressions` property is `true`. Pattern matching wildcard expressions do not need to be valid JSON pointers.
 
-Example: include all properties that are descendents of `/data`:
+Example 1: process all elements that are descendents of a `data` property anywhere in the document:
 
 ```csharp
-var matcher = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(
-  pointersToInclude: new[] { "/data/*" },
-  pointersToExclude: null,
-  allowWildcards: true
-);
+var matcher = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() {
+    AllowWildcardExpressions = true,
+    PointersToInclude = ["*/data/*"]
+});
 
 var options = new TimeSeriesExtractorOptions() {
-  IncludeProperty = matcher
+  CanProcessElement = matcher
+}
+```
+
+Example 2: exclude all properties named `metadata` anywhere in the document:
+
+```csharp
+var matcher = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() {
+    AllowWildcardExpressions = true,
+    PointersToExclude = ["*/metadata"]
+});
+
+var options = new TimeSeriesExtractorOptions() {
+  CanProcessElement = matcher
 }
 ```
 
 
 ### Pattern Matching using MQTT-style Match Expressions
 
-In addition to matching using wildcard characters, `TimeSeriesExtractor.CreateJsonPointerMatchDelegate` also supports using MQTT-style match expressions in JSON pointers when the `allowWildcards` parameter is `true`.
+In addition to matching using wildcard characters, `TimeSeriesExtractor.CreateJsonPointerMatchDelegate` also supports using MQTT-style match expressions in JSON pointers when the `TimeSeriesExtractorOptions.AllowWildcardExpressions` property is `true` parameter is `true`. Note that, unlike with pattern matching expressions, MQTT-style match expressions must be valid JSON pointers.
 
-Example 1: include all properties that are descendents of `/data/instrument-1`:
+Example 1: process all elements that are descendents of `/data/instrument-1`:
 
 ```csharp
-var matcher = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(
-  pointersToInclude: new[] { "/data/instrument-1/#" },
-  pointersToExclude: null,
-  allowWildcards: true
-);
+var matcher = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() {
+    AllowWildcardExpressions = true,
+    PointersToInclude = ["/data/instrument-1/#"]
+});
 
 var options = new TimeSeriesExtractorOptions() {
-  IncludeProperty = matcher
+  CanProcessElement = matcher
 }
 ```
 
 Example 2: include all `temperature` properties that are grandchildren of `/data`:
 
 ```csharp
-var matcher = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(
-  pointersToInclude: new[] { "/data/+/temperature" },
-  pointersToExclude: null,
-  allowWildcards: true
-);
+var matcher = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() {
+    AllowWildcardExpressions = true,
+    PointersToInclude = ["/data/+/temperature"]
+});
 
 var options = new TimeSeriesExtractorOptions() {
-  IncludeProperty = matcher
+  CanProcessElement = matcher
 }
 ```
 
