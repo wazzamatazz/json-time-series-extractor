@@ -20,7 +20,7 @@ namespace Jaahas.Json {
         ///   If <see cref="StartAt"/> is <see langword="null"/> start from the root of the JSON 
         ///   document.
         /// </remarks>
-        public JsonPointer? StartAt { get; set; }
+        public JsonPointerLiteral? StartAt { get; set; }
 
         /// <summary>
         /// The template to use when generating keys for extracted values.
@@ -110,7 +110,7 @@ namespace Jaahas.Json {
         /// 
         /// </remarks>
         /// <seealso cref="TimestampParser"/>
-        public JsonPointer? TimestampProperty { get; set; } = JsonPointer.Parse(TimeSeriesExtractorConstants.DefaultTimestampProperty);
+        public JsonPointerLiteral? TimestampProperty { get; set; } = JsonPointer.Parse(TimeSeriesExtractorConstants.DefaultTimestampProperty);
 
         /// <summary>
         /// A delegate that overrides the default timestamp parser.
@@ -182,29 +182,10 @@ namespace Jaahas.Json {
         public bool AllowNestedTimestamps { get; set; }
 
         /// <summary>
-        /// A delegate that is used to determine if a sample should be emitted for a given 
-        /// JSON property.
+        /// A delegate that is used to determine if a JSON element should be processed by the time 
+        /// series extractor.
         /// </summary>
-        /// <remarks>
-        /// 
-        /// <para>
-        ///   The parameter passed to the delegate is the JSON pointer path for the property.
-        /// </para>
-        /// 
-        /// <para>
-        ///   Samples are never emitted for timestamp properties , even if they are explicitly 
-        ///   included by <see cref="IncludeProperty"/>.
-        /// </para>
-        /// 
-        /// <para>
-        ///   <see cref="TimeSeriesExtractor.CreatePropertyMatcher(IEnumerable{JsonPointer}?, IEnumerable{JsonPointer}?)"/> 
-        ///   and <see cref="TimeSeriesExtractor.CreatePropertyMatcher(IEnumerable{string}?, IEnumerable{string}?)"/> 
-        ///   can be used to create a compatible delegate for <see cref="IncludeProperty"/> from 
-        ///   lists of JSON pointers to include and/or exclude.
-        /// </para>
-        /// 
-        /// </remarks>
-        public Func<JsonPointer, bool>? IncludeProperty { get; set; }
+        public JsonPointerMatchDelegate? CanProcessElement { get; set; } 
 
         /// <summary>
         /// When <see langword="true"/>, JSON properties that contain other objects or arrays will 
@@ -404,10 +385,10 @@ namespace Jaahas.Json {
 
             AllowNestedTimestamps = existing.AllowNestedTimestamps;
             AllowUnresolvedTemplateReplacements = existing.AllowUnresolvedTemplateReplacements;
+            CanProcessElement = existing.CanProcessElement;
             GetDefaultTimestamp = existing.GetDefaultTimestamp;
             GetTemplateReplacement = existing.GetTemplateReplacement;
             IncludeArrayIndexesInSampleKeys = existing.IncludeArrayIndexesInSampleKeys;
-            IncludeProperty = existing.IncludeProperty;
             MaxDepth = existing.MaxDepth;
             PathSeparator = existing.PathSeparator;
             Recursive = existing.Recursive;
