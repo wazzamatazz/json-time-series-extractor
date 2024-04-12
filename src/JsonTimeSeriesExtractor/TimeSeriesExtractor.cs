@@ -25,12 +25,11 @@ namespace Jaahas.Json {
         /// </returns>
         [GeneratedRegex(@"\{(?<property>[^\}]+?)\}", RegexOptions.Singleline)]
         private static partial Regex GetSampleKeyTemplateMatcher();
-
 #else
         /// <summary>
         /// Matches JSON property name references in sample key templates.
         /// </summary>
-        private static readonly Regex s_sampleKeyTemplateMatcher = new Regex(@"\{(?<property>[^\}]+?)\}", RegexOptions.Singleline);
+        private static readonly Regex s_sampleKeyTemplateMatcher = new Regex(@"\{(?<property>[^\}]+?)\}", RegexOptions.Singleline | RegexOptions.Compiled);
 
         /// <summary>
         /// Gets a regular expression matcher for JSON property name references in sample key templates.
@@ -42,103 +41,79 @@ namespace Jaahas.Json {
 #endif
 
         /// <summary>
-        /// Single-level wildcard character in a JSON Pointer path.
+        /// Single-level wildcard character in a JSON Pointer MQTT match expression.
         /// </summary>
-        public const string SingleLevelWildcard = "+";
+        public const string SingleLevelMqttWildcard = "+";
 
         /// <summary>
-        /// Multi-level wildcard character in a JSON Pointer path.
+        /// Multi-level wildcard character in a JSON Pointer MQTT match expression.
         /// </summary>
         /// <remarks>
         ///   Multi-level wildcards are only valid in the final segment of a JSON Pointer path.
         /// </remarks>
-        public const string MultiLevelWildcard = "#";
+        public const string MultiLevelMqttWildcard = "#";
 
         /// <summary>
-        /// Single-character wildcard character in a JSON Pointer path.
+        /// Single-character wildcard character in a JSON Pointer pattern match expression.
         /// </summary>
         public const string SingleCharacterWildcard = "?";
 
         /// <summary>
-        /// Multi-character wildcard character in a JSON Pointer path.
+        /// Multi-character wildcard character in a JSON Pointer pattern match expression.
         /// </summary>
         public const string MultiCharacterWildcard = "*";
 
 
         /// <summary>
-        /// Creates a property matcher function compatible with <see cref="TimeSeriesExtractorOptions.IncludeProperty"/> 
-        /// that includes and/or excludes properties matching the specified pointers.
+        /// Creates a delegate compatible with <see cref="TimeSeriesExtractorOptions.CanProcessElement"/> 
+        /// that includes and/or excludes JSON elements based on the provided options.
         /// </summary>
-        /// <param name="pointersToInclude">
-        ///   The JSON pointers to properties to include. If not <see langword="null"/>, only 
-        ///   properties that match an entry in this list will be included. Otherwise, properties 
-        ///   will be included unless they match an entry in <paramref name="pointersToExclude"/>.
-        /// </param>
-        /// <param name="pointersToExclude">
-        ///   The JSON pointers to properties to exclude.
-        /// </param>
-        /// <param name="allowWildcards">
-        ///   Specifies if MQTT-style wildcard patterns are allowed in the specified JSON pointer 
-        ///   paths.
+        /// <param name="options">
+        ///   The options for the delegate.
         /// </param>
         /// <returns>
-        ///   A function that returns <see langword="true"/> if a <see cref="TimeSeriesSample"/> 
-        ///   should be generated for the specified property or <see langword="false"/> otherwise.
+        ///   A function that returns <see langword="true"/> if a <see cref="JsonElement"/> should 
+        ///   be processed <see langword="false"/> otherwise.
         /// </returns>
-        /// <remarks>
-        /// 
-        /// <para>
-        ///   When wildcard patterns are enabled via the <paramref name="allowWildcards"/> parameter, 
-        ///   segments in <see cref="JsonPointer"/> instances can specify either pattern match 
-        ///   wildcards (i.e. <c>?</c> for a single-character wildcard, and <c>*</c> for a 
-        ///   multi-character wildcard) or MQTT-style wildcard characters (i.e. <c>+</c> for a 
-        ///   single-level wildcard, and <c>#</c> for a multi-level wildcard).
-        /// </para>
-        /// 
-        /// <para>
-        ///   The two matching styles are mutually exclusive; if a pointer path contains single- 
-        ///   or multi-character wildcard characters the path is assumed to be a pattern match, 
-        ///   and MQTT-style wildcards are treated as literal characters. For example, 
-        ///   <c>/foo/+/bar</c> is treated as an MQTT-style match, but <c>/foo/+/*</c> is treated 
-        ///   as a regular pattern match.
-        /// </para>
-        /// 
-        /// <para>
-        ///   In an MQTT-style match expression, the multi-level wildcard character is only valid 
-        ///   in the final segment of the pointer path. For example, <c>/foo/bar/#</c> is a valid 
-        ///   MQTT match expression, but <c>/foo/#/bar</c> is not.
-        /// </para>
-        /// 
-        /// <para>
-        ///   In an MQTT-style match expression, you cannot specify both wildcard and non-wildcard 
-        ///   characters in the same pointer segment. For example, <c>/foo/bar+/baz</c> is not a 
-        ///   valid MQTT match expression and will be interpreted as a literal JSON Pointer path.
-        /// </para>
-        /// 
-        /// </remarks>
-        public static Func<JsonPointer, bool> CreateJsonPointerMatchDelegate(IEnumerable<JsonPointer>? pointersToInclude, IEnumerable<JsonPointer>? pointersToExclude, bool allowWildcards = false) {
-            Predicate<JsonPointer>? includePredicate = null;
-            Predicate<JsonPointer>? excludePredicate = null;
-
-            if (pointersToInclude != null) { 
-                includePredicate = CreateJsonPointerMatchDelegate(pointersToInclude, allowWildcards);
+        /// <exception cref="ArgumentNullException">
+        ///   <paramref name="options"/> is <see langword="null"/>.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///   Any entry in <see cref="JsonPointerMatchDelegateOptions.PointersToInclude"/> or 
+        ///   <see cref="JsonPointerMatchDelegateOptions.PointersToExclude"/> is <see langword="null"/>.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        ///   Any entry in <see cref="JsonPointerMatchDelegateOptions.PointersToInclude"/> or 
+        ///   <see cref="JsonPointerMatchDelegateOptions.PointersToExclude"/> is not a valid JSON 
+        ///   pointer or pattern wildcard expression.
+        /// </exception>
+        public static JsonPointerMatchDelegate CreateJsonPointerMatchDelegate(JsonPointerMatchDelegateOptions options) {
+            if (options == null) {
+                throw new ArgumentNullException(nameof(options));
             }
 
-            if (pointersToExclude != null) {
-                excludePredicate = CreateJsonPointerMatchDelegate(pointersToExclude, allowWildcards);
+            JsonPointerMatchDelegate? includePredicate = null;
+            JsonPointerMatchDelegate? excludePredicate = null;
+
+            if (options.PointersToInclude != null) {
+                includePredicate = CreateJsonPointerMatchDelegate(options.PointersToInclude, options.AllowWildcardExpressions, options.UseCompiledRegularExpressions);
+            }
+
+            if (options.PointersToExclude != null) {
+                excludePredicate = CreateJsonPointerMatchDelegate(options.PointersToExclude, options.AllowWildcardExpressions, options.UseCompiledRegularExpressions);
             }
 
             if (includePredicate == null && excludePredicate == null) {
-                return _ => true;
+                return (_, _, _) => true;
             }
 
-            return pointer => {
-                if (excludePredicate != null && excludePredicate.Invoke(pointer)) {
+            return (context, pointer, element) => {
+                if (excludePredicate != null && excludePredicate.Invoke(context, pointer, element)) {
                     return false;
                 }
 
                 if (includePredicate != null) {
-                    return includePredicate.Invoke(pointer);
+                    return includePredicate.Invoke(context, pointer, element);
                 }
 
                 return true;
@@ -147,198 +122,205 @@ namespace Jaahas.Json {
 
 
         /// <summary>
-        /// Creates a property matcher function compatible with <see cref="TimeSeriesExtractorOptions.IncludeProperty"/> 
-        /// that includes and/or excludes properties matching the specified pointers.
-        /// </summary>
-        /// <param name="pointersToInclude">
-        ///   The JSON pointers for properties to include. If not <see langword="null"/>, only 
-        ///   properties that match an entry in this list will be included. Otherwise, properties 
-        ///   will be included unless they match an entry in <paramref name="pointersToExclude"/>.
-        /// </param>
-        /// <param name="pointersToExclude">
-        ///   The JSON pointers to properties to exclude.
-        /// </param>
-        /// <param name="allowWildcards">
-        ///   Specifies if MQTT-style wildcard patterns are allowed in the specified JSON pointer 
-        ///   paths.
-        /// </param>
-        /// <returns>
-        ///   A function that returns <see langword="true"/> if a <see cref="TimeSeriesSample"/> 
-        ///   should be generated for the specified property or <see langword="false"/> otherwise.
-        /// </returns>
-        /// <exception cref="ArgumentNullException">
-        ///   Any entry in <paramref name="pointersToInclude"/> or <paramref name="pointersToExclude"/> 
-        ///   is <see langword="null"/>.
-        /// </exception>
-        /// <exception cref="PointerParseException">
-        ///   Any entry in <paramref name="pointersToInclude"/> or <paramref name="pointersToExclude"/> 
-        ///   is not a valid JSON pointer.
-        /// </exception>
-        /// <remarks>
-        /// 
-        /// <para>
-        ///   When wildcard patterns are enabled via the <paramref name="allowWildcards"/> parameter, 
-        ///   segments in <see cref="JsonPointer"/> instances can specify either pattern match 
-        ///   wildcards (i.e. <c>?</c> for a single-character wildcard, and <c>*</c> for a 
-        ///   multi-character wildcard) or MQTT-style wildcard characters (i.e. <c>+</c> for a 
-        ///   single-level wildcard, and <c>#</c> for a multi-level wildcard).
-        /// </para>
-        /// 
-        /// <para>
-        ///   The two matching styles are mutually exclusive; if a pointer path contains single- 
-        ///   or multi-character wildcard characters the path is assumed to be a pattern match, 
-        ///   and MQTT-style wildcards are treated as literal characters. For example, 
-        ///   <c>/foo/+/bar</c> is treated as an MQTT-style match, but <c>/foo/+/*</c> is treated 
-        ///   as a regular pattern match.
-        /// </para>
-        /// 
-        /// <para>
-        ///   In an MQTT-style match expression, the multi-level wildcard character is only valid 
-        ///   in the final segment of the pointer path. For example, <c>/foo/bar/#</c> is a valid 
-        ///   MQTT match expression, but <c>/foo/#/bar</c> is not.
-        /// </para>
-        /// 
-        /// <para>
-        ///   In an MQTT-style match expression, you cannot specify both wildcard and non-wildcard 
-        ///   characters in the same pointer segment. For example, <c>/foo/bar+/baz</c> is not a 
-        ///   valid MQTT match expression and will be interpreted as a literal JSON Pointer path.
-        /// </para>
-        /// 
-        /// </remarks>
-        public static Func<JsonPointer, bool> CreateJsonPointerMatchDelegate(IEnumerable<string>? pointersToInclude, IEnumerable<string>? pointersToExclude, bool allowWildcards = false) {
-            var includes = pointersToInclude?.Select(JsonPointer.Parse)?.ToArray();
-            var excludes = pointersToExclude?.Select(JsonPointer.Parse)?.ToArray();
-            return CreateJsonPointerMatchDelegate(includes, excludes, allowWildcards);
-        }
-
-
-        /// <summary>
         /// Creates a predicate that tests if a JSON pointer matches against any of the specified JSON pointers.
         /// </summary>
-        /// <param name="matchPointers">
+        /// <param name="matchRules">
         ///   The JSON pointers to match against.
         /// </param>
         /// <param name="allowWildcards">
         ///   Specifies if pattern match or MQTT-style match expressions are allowed in the 
-        ///   <paramref name="matchPointers"/>.
+        ///   <paramref name="matchRules"/>.
         /// </param>
         /// <returns>
         ///   A predicate that returns <see langword="true"/> if the specified JSON pointer matches 
-        ///   any of the <paramref name="matchPointers"/>.
+        ///   any of the <paramref name="matchRules"/>.
         /// </returns>
-        private static Predicate<JsonPointer> CreateJsonPointerMatchDelegate(IEnumerable<JsonPointer> matchPointers, bool allowWildcards) {
+        private static JsonPointerMatchDelegate CreateJsonPointerMatchDelegate(IEnumerable<JsonPointerMatch> matchRules, bool allowWildcards, bool useCompiledRegularExpressions) {
+            matchRules = matchRules.ToArray(); // We don't want to enumerate this multiple times.
+
             if (!allowWildcards) {
-                // No wildcards: return a simple predicate that checks for equality.
-                return pointer => matchPointers.Any(x => x != null && x.Equals(pointer));
+                // No wildcards.
+                return (context, pointer, element) => matchRules.Any(x => MatchExactOrPartialJsonPointer(context, x.Pointer, pointer, element));
             }
 
-            var pointersWithWildcardStatus = matchPointers.Select(x => {
-                var containsPatternMatchWildcard = ContainsPatternMatchWildcard(x);
-                return new {
-                    Pointer = x,
-                    ContainsPatternMatchExpression = containsPatternMatchWildcard,
-                    ContainsMqttMatchExpression = !containsPatternMatchWildcard && (ContainsSingleLevelMqttWildcard(x) || ContainsMultiLevelMqttWildcard(x))
-                };
-            }).ToArray();
-
-            if (pointersWithWildcardStatus.All(x => !x.ContainsPatternMatchExpression && !x.ContainsMqttMatchExpression)) {
-                // No wildcards are present: return a simple predicate that checks for equality.
-                return pointer => matchPointers.Any(x => x != null && x.Equals(pointer));
+            if (matchRules.All(x => !x.IsWildcardMatchRule)) {
+                // No wildcards.
+                return (context, pointer, element) => matchRules.Any(x => MatchExactOrPartialJsonPointer(context, x.Pointer, pointer, element));
             }
 
             // Wildcards are present: return a more complex predicate that checks for wildcard matches.
-            var predicates = new List<Predicate<JsonPointer>>();
+            var predicates = new List<JsonPointerMatchDelegate>();
 
-            foreach (var matchPointer in pointersWithWildcardStatus) {
-                if (matchPointer == null) {
+            foreach (var matchRule in matchRules) {
+                if (matchRule == null) {
                     continue;
                 }
 
-                if (!matchPointer.ContainsPatternMatchExpression && !matchPointer.ContainsMqttMatchExpression) {
-                    // Pointer does not contain wildcards: add a simple predicate that checks for equality.
-                    predicates.Add(pointer => matchPointer.Equals(pointer));
+                if (!matchRule.IsWildcardMatchRule) {
+                    // No wildcards in current match rule.
+                    predicates.Add((context, pointer, element) => matchRules.Any(x => MatchExactOrPartialJsonPointer(context, x.Pointer, pointer, element)));
                     continue;
                 }
 
-                // Pointer contains wildcards: add a predicate that checks for wildcard matches.
+                // Match rule contains wildcards: add a predicate that checks for wildcard matches.
 
-                if (matchPointer.ContainsPatternMatchExpression) {
+                if (matchRule.IsPatternWildcardMatchRule) {
                     // Use pattern match wildcards.
+
 #if NETCOREAPP
-                    var pattern = Regex.Escape(matchPointer.Pointer.ToString())
+                    var pattern = Regex.Escape(matchRule.RawValue!)
                         .Replace(@"\*", ".*", StringComparison.Ordinal)
                         .Replace(@"\?", ".", StringComparison.Ordinal);
 #else
-                    var pattern = Regex.Escape(matchPointer.Pointer.ToString())
+                    var pattern = Regex.Escape(matchRule.RawValue!)
                         .Replace(@"\*", ".*")
                         .Replace(@"\?", ".");
 #endif
 
-                    var regex = new Regex($"^{pattern}$", RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
-                    predicates.Add(pointer => regex.IsMatch(pointer.ToString()));
+                    var regex = new Regex(
+                        $"^{pattern}$", 
+                        useCompiledRegularExpressions
+                            ? RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled
+                            : RegexOptions.IgnoreCase | RegexOptions.Singleline, 
+                        TimeSpan.FromSeconds(1));
+
+                    predicates.Add((context, pointer, element) => {
+                        // If the JSON element is an object or an array and we are running in
+                        // recursive mode we will always return true if we have not reached our
+                        // maximum recursion depth. This is required because we perform a regex
+                        // match against the entire pointer string instead of doing a
+                        // segment-by-segment match like we do with MQTT-style expressions so we
+                        // don't want to accidentally prune non-matching pointers too early.
+                        if (context.Options.Recursive && (context.Options.MaxDepth < 1 || context.ElementStack.Count < context.Options.MaxDepth) && (element.ValueKind == JsonValueKind.Object || element.ValueKind == JsonValueKind.Array)) {
+                            return true;
+                        }
+                        return regex.IsMatch(pointer.ToString());
+                    });
                     continue;
                 }
 
-                // For each pointer segment, we'll check if that segment is a single-level or
-                // multi-level wildcard.
-                var matchSegments = matchPointer.Pointer.Segments.Reverse().Select((x, i) => new {
+                // Not a pattern match expression i.e. one or more of the match rule's pointer
+                // segments are MQTT-style wildcards. For each pointer segment, we'll check if
+                // that segment is a single-level or multi-level wildcard.
+                var matchSegments = matchRule.Pointer!.Segments.Reverse().Select((x, i) => new {
                     Segment = x,
-                    IsSingleLevelWildcard = x.Value.Equals(SingleLevelWildcard, StringComparison.Ordinal),
+                    IsSingleLevelWildcard = x.Value.Equals(SingleLevelMqttWildcard, StringComparison.Ordinal),
                     // Multi-level wildcard is only valid in the final segment, which is at index
                     // 0 in our reversed segment list.
-                    IsMultiLevelWildcard = i == 0 && x.Value.Equals(MultiLevelWildcard, StringComparison.Ordinal)
+                    IsMultiLevelWildcard = i == 0 && x.Value.Equals(MultiLevelMqttWildcard, StringComparison.Ordinal)
                 }).Reverse().ToArray();
 
-                predicates.Add(pointer => {
+                predicates.Add((context, pointer, element) => {
                     if (pointer.Segments.Length < matchSegments.Length) {
-                        // The pointer has fewer segments than the match pattern; no match.
-                        return false;
-                    }
+                        // Special handling for when the element pointer has fewer segments than
+                        // the match pointer.
 
-                    if (pointer.Segments.Length > matchSegments.Length) {
-                        // The pointer has more segments than the match pattern; no match unless
-                        // the last match segment is a multi-level wildcard.
-                        return matchSegments[matchSegments.Length - 1].IsMultiLevelWildcard;
-                    }
-
-                    for (var i = 0; i < pointer.Segments.Length; i++) {
-                        var pointerSegment = pointer.Segments[i];
-                        var matchSegment = matchSegments[i];
-
-                        if (matchSegment.IsSingleLevelWildcard) {
-                            // Single-level wildcard: match any segment.
-                            continue;
+                        if (!context.Options.Recursive) {
+                            // We're not running in recursive mode so definitely no match.
+                            return false;
                         }
-
-                        if (matchSegment.IsMultiLevelWildcard) {
-                            // Multi-level wildcard: match all remaining pointer segments.
-                            break;
+                        if (element.ValueKind != JsonValueKind.Object && element.ValueKind != JsonValueKind.Array) {
+                            // The element is not an object or an array so definitely no match.
+                            return false;
                         }
-
-                        // Check for an exact match between the current pointer segment and match
-                        // segment.
-                        if (!pointerSegment.Equals(matchSegment.Segment)) {
+                        if (context.Options.MaxDepth >= 1 && context.ElementStack.Count >= context.Options.MaxDepth) {
+                            // We have reached our maximum recursion depth so definitely no match.
                             return false;
                         }
                     }
 
-                    return true;
+                    var elementPointerIsLongerThanMatchPointer = pointer.Segments.Length > matchSegments.Length;
+
+                    if (elementPointerIsLongerThanMatchPointer) {
+                        // The pointer has more segments than the match pattern; definitely no
+                        // match unless the last match segment is a multi-level wildcard.
+                        if (!matchSegments[matchSegments.Length - 1].IsMultiLevelWildcard) {
+                            return false;
+                        }
+                    }
+
+                    // The predicate is invoked on each iteration of the document traversal.
+                    // Therefore, we only ever need to test the final segment of the element
+                    // pointer, as we will have already tested the previous segments in
+                    // previous iterations.
+
+                    var pointerSegmentIndex = pointer.Segments.Length - 1;
+                    var pointerSegment = pointer.Segments[pointerSegmentIndex];
+                    var matchSegment = pointerSegmentIndex >= matchSegments.Length
+                        ? matchSegments[matchSegments.Length - 1]
+                        : matchSegments[pointerSegmentIndex];
+
+                    if (matchSegment.IsSingleLevelWildcard) {
+                        // Single-level wildcard: match the current segment unless the element
+                        // pointer has more segments than the match pointer and we have advanced
+                        // beyond the end of the match pointer.
+                        if (elementPointerIsLongerThanMatchPointer && pointerSegmentIndex >= matchSegments.Length) {
+                            return false;
+                        }
+
+                        return true;
+                    }
+
+                    if (matchSegment.IsMultiLevelWildcard) {
+                        // Multi-level wildcard: always match the current segment.
+                        return true;
+                    }
+
+                    // Not a wildcard; check if the segment values match.
+                    return pointerSegment.Equals(matchSegment.Segment);
                 });
             }
 
             return predicates.Count == 0 
-                ? _ => true
-                : pointer => predicates.Any(x => x.Invoke(pointer));
+                ? (_, _, _) => true
+                : (context, pointer, element) => predicates.Any(x => x.Invoke(context, pointer, element));
+        }
 
-            bool ContainsPatternMatchWildcard(JsonPointer p) {
-                var s = p.ToString();
-                return s.Contains(SingleCharacterWildcard) || s.Contains(MultiCharacterWildcard);
-            };
 
-            bool ContainsSingleLevelMqttWildcard(JsonPointer p) => p.Segments.Any(x => x.Value.Equals(SingleLevelWildcard, StringComparison.Ordinal));
+        /// <summary>
+        /// Tests if the JSON pointer for the specified element matches the provided match pointer.
+        /// </summary>
+        /// <param name="context">
+        ///   The context for the extraction.
+        /// </param>
+        /// <param name="matchPointer">
+        ///   The match pointer.
+        /// </param>
+        /// <param name="elementPointer">
+        ///   The pointer for the element that is currently being processed.
+        /// </param>
+        /// <param name="element">
+        ///   The element that is currently being processed.
+        /// </param>
+        /// <returns>
+        ///   <see langword="true"/> if the element pointer matches the match pointer; otherwise, 
+        ///   <see langword="false"/>.
+        /// </returns>
+        /// <remarks>
+        ///   If <paramref name="element"/> is an object or an array and we are running in 
+        ///   recursive mode, we will also allow partial matches i.e. if the element pointer has 
+        ///   fewer segments than the match pointer, we will treat it as a match if all of the 
+        ///   element pointer segments match their equivalent match pointer segments.
+        /// </remarks>
+        private static bool MatchExactOrPartialJsonPointer(TimeSeriesExtractorContext context, JsonPointer? matchPointer, JsonPointer elementPointer, JsonElement element) {
+            if (matchPointer == null) {
+                return false;
+            }
 
-            bool ContainsMultiLevelMqttWildcard(JsonPointer p) => p.Segments[p.Segments.Length - 1].Value.Equals(MultiLevelWildcard, StringComparison.Ordinal);
+            if (matchPointer.Equals(elementPointer)) {
+                return true;
+            }
 
+            if (context.Options.Recursive && (element.ValueKind == JsonValueKind.Object || element.ValueKind == JsonValueKind.Array) && elementPointer.Segments.Length < matchPointer.Segments.Length) {
+                for (var i = 0; i < elementPointer.Segments.Length; i++) {
+                    if (!matchPointer.Segments[i].Equals(elementPointer.Segments[i])) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            return false;
         }
 
 
@@ -393,7 +375,7 @@ namespace Jaahas.Json {
             }
 
             if (options.StartAt != null) {
-                var newElement = options.StartAt!.Evaluate(element);
+                var newElement = options.StartAt!.Pointer.Evaluate(element);
                 if (newElement == null) {
                     yield break;
                 }
@@ -507,6 +489,9 @@ namespace Jaahas.Json {
             var pointer = JsonPointer.Create(context.ElementStack.Where(x => x.Key != null).Reverse().Select(x => PointerSegment.Create(x.Key!)));
 
             var currentElement = context.ElementStack.Peek();
+            if (!context.CanProcessElement(pointer, currentElement.Element)) {
+                yield break;
+            }
 
             if (!context.Options.Recursive || (context.Options.MaxDepth > 0 && currentRecursionDepth >= context.Options.MaxDepth)) {
                 // We are not using recursive mode, or we have exceeded the maximum recursion
@@ -576,7 +561,7 @@ namespace Jaahas.Json {
 
             TimeSeriesSample? BuildSample(JsonPointer pointer, JsonElement element) {
                 // Check if this element should be included.
-                if (!context.IncludeElement.Invoke(pointer)) {
+                if (!context.CanProcessElement(pointer, element)) {
                     return null;
                 }
 

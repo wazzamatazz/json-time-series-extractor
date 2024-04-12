@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Text.Json;
 
 using Json.Pointer;
@@ -10,17 +9,12 @@ namespace Jaahas.Json {
     /// <summary>
     /// The context to use when extracting samples using <see cref="TimeSeriesExtractor"/>.
     /// </summary>
-    internal sealed class TimeSeriesExtractorContext {
+    public sealed class TimeSeriesExtractorContext {
 
         /// <summary>
         /// The extractor options.
         /// </summary>
-        internal TimeSeriesExtractorOptions Options { get; }
-
-        /// <summary>
-        /// A delegate that determines whether a document property should be extracted as a time series.
-        /// </summary>
-        internal Func<JsonPointer, bool> IncludeElement { get; }
+        public TimeSeriesExtractorOptions Options { get; }
 
         /// <summary>
         /// The stack of JSON elements that are currently being processed.
@@ -67,22 +61,33 @@ namespace Jaahas.Json {
             IsDefaultSampleKeyTemplate = Options.Recursive
                 ? string.Equals(Options.Template, TimeSeriesExtractorConstants.FullPropertyNamePlaceholder, StringComparison.Ordinal)
                 : string.Equals(Options.Template, TimeSeriesExtractorConstants.FullPropertyNamePlaceholder, StringComparison.Ordinal) || string.Equals(Options.Template, TimeSeriesExtractorConstants.LocalPropertyNamePlaceholder, StringComparison.Ordinal);
+        }
 
-            IncludeElement = p => {
-                // Never include the timestamp property for the current document level.
-                var ts = timestampStack.Peek();
-                if (ts.Pointer != null && p.Equals(ts.Pointer)) {
-                    return false;
-                }
 
-                // Lambdas declared in structs cannot reference instance members, so we need to
-                // use the constructor parameter for the options instead.
-                if (options.IncludeProperty != null && !options.IncludeProperty.Invoke(p)) {
-                    return false;
-                }
+        /// <summary>
+        /// Tests whether the specified JSON element can be processed.
+        /// </summary>
+        /// <param name="pointer">
+        ///   The JSON Pointer to the element.
+        /// </param>
+        /// <param name="element">
+        ///   The JSON element to test.
+        /// </param>
+        /// <returns>
+        ///   <see langword="true"/> if the element can be processed; otherwise, <see langword="false"/>.
+        /// </returns>
+        internal bool CanProcessElement(JsonPointer pointer, JsonElement element) {
+            // Never process the timestamp property for the current document level.
+            var ts = TimestampStack.Peek();
+            if (ts.Pointer != null && pointer.Equals(ts.Pointer)) {
+                return false;
+            }
 
-                return true;
-            };
+            if (Options.CanProcessElement != null && !Options.CanProcessElement.Invoke(this, pointer, element)) {
+                return false;
+            }
+
+            return true;
         }
 
     }
