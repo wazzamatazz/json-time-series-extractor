@@ -41,6 +41,13 @@ namespace Jaahas.Json {
         /// </para>
         /// 
         /// <para>
+        ///   MQTT-stye match expressions must always be valid JSON Pointers. Pattern match 
+        ///   expressions do not have to be valid JSON Pointers, but will be ignored if 
+        ///   <see cref="AllowWildcardExpressions"/> is <see langword="false"/> if they are not 
+        ///   valid JSON Pointers.
+        /// </para>
+        /// 
+        /// <para>
         ///   The two matching styles are mutually exclusive; if a pointer path contains single- 
         ///   or multi-character wildcard characters the path is assumed to be a pattern match, 
         ///   and MQTT-style wildcards are treated as literal characters. For example, 
