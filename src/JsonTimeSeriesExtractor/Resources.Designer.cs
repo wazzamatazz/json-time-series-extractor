@@ -61,11 +61,11 @@ namespace Jaahas.Json {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to &apos;{0}&apos; is not a valid JSON pointer..
+        ///   Looks up a localized string similar to &apos;{0}&apos; is not a valid JSON pointer or wildcard pattern expression.
         /// </summary>
-        internal static string Error_InvalidJsonPointer {
+        internal static string Error_NotAValidJsonPointerOrPatternExpression {
             get {
-                return ResourceManager.GetString("Error_InvalidJsonPointer", resourceCulture);
+                return ResourceManager.GetString("Error_NotAValidJsonPointerOrPatternExpression", resourceCulture);
             }
         }
         
