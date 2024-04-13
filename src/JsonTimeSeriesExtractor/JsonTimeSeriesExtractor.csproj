@@ -5,6 +5,7 @@
     <RootNamespace>Jaahas.Json</RootNamespace>
     <AssemblyName>Jaahas.Json.TimeSeriesExtractor</AssemblyName>
     <Description>A library for parsing time series data samples from JSON documents using System.Text.Json</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -33,6 +34,10 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="docs\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

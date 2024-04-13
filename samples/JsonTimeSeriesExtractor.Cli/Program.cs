@@ -3,8 +3,6 @@ using System.Text.Json.Serialization;
 
 using Jaahas.Json;
 
-using Json.Pointer;
-
 var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
 jsonOptions.Converters.Add(new JsonStringEnumConverter());
 
@@ -31,8 +29,6 @@ var options = new TimeSeriesExtractorOptions() {
     // for the sample. We'll use this as the key when emitting a sample.
     Template = "{t}"
 };
-
-
 
 foreach (var sample in TimeSeriesExtractor.GetSamples(json, options)) {
     Console.WriteLine(JsonSerializer.Serialize(sample, jsonOptions));
