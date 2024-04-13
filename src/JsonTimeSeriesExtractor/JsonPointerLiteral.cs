@@ -143,17 +143,26 @@ namespace Jaahas.Json {
         /// <summary>
         /// <see cref="TypeConverter"/> for <see cref="JsonPointerLiteral"/>.
         /// </summary>
-        public sealed class JsonPointerLiteralTypeConverter : TypeConverter {
+        internal sealed class JsonPointerLiteralTypeConverter : TypeConverter {
+
+            /// <summary>
+            /// The standard values used by this converter.
+            /// </summary>
+            /// <remarks>
+            ///   This field is initialized using a so-called poor man's lazy in <see cref="GetStandardValues(ITypeDescriptorContext)"/>.
+            /// </remarks>
+            private static StandardValuesCollection? _standardValues;
+
 
             /// <inheritdoc />
             public override bool CanConvertFrom(ITypeDescriptorContext? context, Type sourceType) {
-                return sourceType == typeof(string) || sourceType == typeof(JsonPointer) || sourceType == typeof(JsonPointerLiteral);
+                return sourceType == typeof(string) || sourceType == typeof(JsonPointer) || sourceType == typeof(JsonPointerLiteral) || base.CanConvertFrom(context, sourceType);
             }
 
 
             /// <inheritdoc />
             public override bool CanConvertTo(ITypeDescriptorContext? context, Type? destinationType) {
-                return destinationType == typeof(string) || destinationType == typeof(JsonPointer) || destinationType == typeof(JsonPointerLiteral);
+                return destinationType == typeof(string) || destinationType == typeof(JsonPointer) || destinationType == typeof(JsonPointerLiteral) || base.CanConvertTo(context, destinationType);
             }
 
 
@@ -169,7 +178,7 @@ namespace Jaahas.Json {
                     return literal;
                 }
 
-                return base.ConvertFrom(context, culture, value);
+                throw GetConvertFromException(value);
             }
 
 
@@ -185,7 +194,34 @@ namespace Jaahas.Json {
                     return value;
                 }
 
-                return base.ConvertTo(context, culture, value, destinationType);
+                throw GetConvertToException(value, destinationType);
+            }
+
+
+            /// <inheritdoc/>
+            public override bool GetStandardValuesSupported(ITypeDescriptorContext? context) {
+                return true;
+            }
+
+
+            /// <inheritdoc/>
+            public override bool GetStandardValuesExclusive(ITypeDescriptorContext? context) {
+                return false;
+            }
+
+
+            /// <inheritdoc/>
+            public override StandardValuesCollection GetStandardValues(ITypeDescriptorContext? context) {
+                return _standardValues ??= new StandardValuesCollection(new[] { JsonPointer.Empty });
+            }
+
+
+            /// <inheritdoc/>
+            public override bool IsValid(ITypeDescriptorContext? context, object? value) {
+                if (value is string s) {
+                    return TryParse(s, out _);
+                }
+                return value is JsonPointerLiteral || value is JsonPointer;
             }
 
         }

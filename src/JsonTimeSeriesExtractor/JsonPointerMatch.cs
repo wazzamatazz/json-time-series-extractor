@@ -134,7 +134,7 @@ namespace Jaahas.Json {
         ///   <paramref name="pointer"/> is not a valid JSON Pointer or 
         ///   pattern wildcard expression.
         /// </exception>
-        public JsonPointerMatch(string pointer) : this(JsonPointer.TryParse(pointer, out var p) ? p : null, false) {
+        public JsonPointerMatch(string pointer) : this(pointer != null && JsonPointer.TryParse(pointer, out var p) ? p : null, false) {
             if (Pointer == null && pointer != null) {
                 RawValue = pointer;
 
@@ -226,17 +226,26 @@ namespace Jaahas.Json {
         /// <summary>
         /// <see cref="TypeConverter"/> for <see cref="JsonPointerMatch"/>.
         /// </summary>
-        public sealed class JsonPointerMatchTypeConverter : TypeConverter {
+        internal sealed class JsonPointerMatchTypeConverter : TypeConverter {
+
+            /// <summary>
+            /// The standard values used by this converter.
+            /// </summary>
+            /// <remarks>
+            ///   This field is initialized using a so-called poor man's lazy in <see cref="GetStandardValues(ITypeDescriptorContext)"/>.
+            /// </remarks>
+            private static StandardValuesCollection? _standardValues;
+
 
             /// <inheritdoc />
             public override bool CanConvertFrom(ITypeDescriptorContext? context, Type sourceType) {
-                return sourceType == typeof(string) || sourceType == typeof(JsonPointer) || sourceType == typeof(JsonPointerMatch);
+                return sourceType == typeof(string) || sourceType == typeof(JsonPointer) || sourceType == typeof(JsonPointerMatch) || base.CanConvertFrom(context, sourceType);
             }
 
 
             /// <inheritdoc />
             public override bool CanConvertTo(ITypeDescriptorContext? context, Type? destinationType) {
-                return destinationType == typeof(string) || destinationType == typeof(JsonPointerMatch);
+                return destinationType == typeof(string) || destinationType == typeof(JsonPointerMatch) || base.CanConvertTo(context, destinationType);
             }
 
 
@@ -252,7 +261,7 @@ namespace Jaahas.Json {
                     return match;
                 }
 
-                return base.ConvertFrom(context, culture, value);
+                throw GetConvertFromException(value);
             }
 
 
@@ -265,7 +274,34 @@ namespace Jaahas.Json {
                     return value;
                 }
 
-                return base.ConvertTo(context, culture, value, destinationType);
+                throw GetConvertToException(value, destinationType);
+            }
+
+
+            /// <inheritdoc/>
+            public override bool GetStandardValuesSupported(ITypeDescriptorContext? context) {
+                return true;
+            }
+
+
+            /// <inheritdoc/>
+            public override bool GetStandardValuesExclusive(ITypeDescriptorContext? context) {
+                return false;
+            }
+
+
+            /// <inheritdoc/>
+            public override StandardValuesCollection GetStandardValues(ITypeDescriptorContext? context) {
+                return _standardValues ??= new StandardValuesCollection(new[] { JsonPointer.Empty });
+            }
+
+
+            /// <inheritdoc/>
+            public override bool IsValid(ITypeDescriptorContext? context, object? value) {
+                if (value is string s) {
+                    return TryParse(s, out _);
+                }
+                return value is JsonPointerMatch || value is JsonPointer;
             }
 
         }
