@@ -51,7 +51,7 @@ const string VersionFile = "./build/version.json";
 // 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#load nuget:?package=Jaahas.Cake.Extensions&version=1.2.0
+#load nuget:?package=Jaahas.Cake.Extensions&version=2.0.1
 
 // Bootstrap build context and tasks.
 Bootstrap(DefaultSolutionFile, VersionFile);
