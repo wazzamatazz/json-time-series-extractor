@@ -191,6 +191,22 @@ namespace Jaahas.Json {
         }
 
 
+        /// <summary>
+        /// Creates a new <see cref="JsonPointerMatch"/> from a string.
+        /// </summary>
+        /// <param name="pointer">
+        ///   The JSON Pointer string.
+        /// </param>
+        /// <returns>
+        ///   The resulting <see cref="JsonPointerMatch"/> instance.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        ///   <paramref name="pointer"/> is not a valid JSON Pointer or 
+        ///   pattern wildcard expression.
+        /// </exception>
+        public static JsonPointerLiteral Parse(string pointer) => new JsonPointerLiteral(pointer);
+
+
         /// <inheritdoc />
         public override string ToString() => RawValue ?? Pointer!.ToString();
 
@@ -201,10 +217,7 @@ namespace Jaahas.Json {
         /// <param name="pointer">
         ///   The JSON Pointer.
         /// </param>
-        /// <exception cref="ArgumentNullException">
-        ///   <paramref name="pointer"/> is <see langword="null"/>.
-        /// </exception>
-        public static implicit operator JsonPointerMatch(JsonPointer pointer) => new JsonPointerMatch(pointer);
+        public static implicit operator JsonPointerMatch(JsonPointer pointer) => pointer == null ? null! : new JsonPointerMatch(pointer);
 
 
         /// <summary>
@@ -213,14 +226,11 @@ namespace Jaahas.Json {
         /// <param name="pointer">
         ///   The JSON Pointer literal.
         /// </param>
-        /// <exception cref="ArgumentNullException">
-        ///   <paramref name="pointer"/> is <see langword="null"/>.
-        /// </exception>
         /// <exception cref="ArgumentException">
         ///   <paramref name="pointer"/> is not a valid JSON Pointer or a pattern match wildcard 
         ///   expression.
         /// </exception>
-        public static implicit operator JsonPointerMatch(string pointer) => new JsonPointerMatch(pointer);
+        public static implicit operator JsonPointerMatch(string pointer) => pointer == null ? null! : new JsonPointerMatch(pointer);
 
 
         /// <summary>
