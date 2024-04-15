@@ -90,6 +90,24 @@ namespace Jaahas.Json {
         }
 
 
+        /// <summary>
+        /// Creates a new <see cref="JsonPointerLiteral"/> from a string.
+        /// </summary>
+        /// <param name="pointer">
+        ///   The JSON Pointer string.
+        /// </param>
+        /// <returns>
+        ///   The resulting <see cref="JsonPointerLiteral"/> instance.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        ///   <paramref name="pointer"/> is <see langword="null"/>.
+        /// </exception>
+        /// <exception cref="PointerParseException">
+        ///   <paramref name="pointer"/> is not a valid JSON Pointer.
+        /// </exception>
+        public static JsonPointerLiteral Parse(string pointer) => new JsonPointerLiteral(pointer);
+
+
         /// <inheritdoc />
         public override int GetHashCode() => Pointer.GetHashCode();
 
@@ -119,10 +137,7 @@ namespace Jaahas.Json {
         /// <param name="pointer">
         ///   The JSON Pointer.
         /// </param>
-        /// <exception cref="ArgumentNullException">
-        ///   <paramref name="pointer"/> is <see langword="null"/>.
-        /// </exception>
-        public static implicit operator JsonPointerLiteral(JsonPointer pointer) => new JsonPointerLiteral(pointer);
+        public static implicit operator JsonPointerLiteral(JsonPointer pointer) => pointer == null ? null! : new JsonPointerLiteral(pointer);
 
 
         /// <summary>
@@ -131,13 +146,10 @@ namespace Jaahas.Json {
         /// <param name="pointer">
         ///   The JSON Pointer literal.
         /// </param>
-        /// <exception cref="ArgumentNullException">
-        ///   <paramref name="pointer"/> is <see langword="null"/>.
-        /// </exception>
         /// <exception cref="PointerParseException">
         ///   <paramref name="pointer"/> is not a valid JSON Pointer.
         /// </exception>
-        public static implicit operator JsonPointerLiteral(string pointer) => new JsonPointerLiteral(pointer);
+        public static implicit operator JsonPointerLiteral(string pointer) => pointer == null ? null! : new JsonPointerLiteral(pointer);
 
 
         /// <summary>
