@@ -198,9 +198,9 @@ The following built-in template placeholders are available:
 
 | Placeholder | Description | Example |
 |-------------|-------------| ------- |
-| {$prop} | The JSON Pointer path to the property being processed, without the leading `/`. | `data/device-1/temperature` |
-| {$prop-local} | The local property name of the property being processed. | `temperature` |
-| {$prop-path} | The full JSON Pointer path to the *parent element* of the property being processed, without the leading `/`. | `data/device-1` |
+| `{$prop}` | The JSON Pointer path to the property being processed, without the leading `/`. | `data/device-1/temperature` |
+| `{$prop-local}` | The local property name of the property being processed. | `temperature` |
+| `{$prop-path}` | The full JSON Pointer path to the *parent element* of the property being processed, without the leading `/`. | `data/device-1` |
 
 All other placeholders are resolved using the JSON document, or using a default placeholder value (see below). Note that, when recursive mode is disabled, the `{$prop}` and `${prop-local}` template placeholders are functionally identical, and the `{$prop-path}` placeholder will always be replaced with an empty string.
 
