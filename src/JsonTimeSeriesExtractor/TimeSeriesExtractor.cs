@@ -223,8 +223,10 @@ namespace Jaahas.Json {
                             // The element is not an object or an array so definitely no match.
                             return false;
                         }
-                        if (context.Options.MaxDepth >= 1 && context.ElementStack.Count >= context.Options.MaxDepth) {
+                        if (context.Options.MaxDepth >= 1 && context.ElementStack.Count > context.Options.MaxDepth) {
                             // We have reached our maximum recursion depth so definitely no match.
+                            // We use > in the comparison above instead of >= because the element
+                            // stack will always contain the root element.
                             return false;
                         }
                     }
