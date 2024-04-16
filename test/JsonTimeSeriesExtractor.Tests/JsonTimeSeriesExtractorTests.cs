@@ -77,7 +77,7 @@ namespace Jaahas.Json.Tests {
 
 
         [TestMethod]
-        public void ShouldProcessKeyTemplate() {
+        public void ShouldUseCustomKeyTemplate() {
             var deviceSample = new {
                 Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
                 SignalStrength = -75,
@@ -110,7 +110,7 @@ namespace Jaahas.Json.Tests {
 
 
         [TestMethod]
-        public void ShouldProcessKeyTemplateWithDefaultReplacements() {
+        public void ShouldUseCustomKeyTemplateWithDefaultReplacements() {
             var deviceSample = new {
                 Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
                 SignalStrength = -75,
@@ -148,6 +148,69 @@ namespace Jaahas.Json.Tests {
             Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
             Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
             Assert.IsTrue(samples.All(x => x.Key.StartsWith(TestContext.TestName + "/" + deviceSample.MacAddress + "/" + guid)));
+        }
+
+
+        [TestMethod]
+        public void ShouldUsePropertyPathInCustomTemplate() {
+            var data = new { 
+                A = new { 
+                    B = new { 
+                        C = new { 
+                            Name = "Instrument-1",
+                            Value = 99.997
+                        }
+                    }
+                }
+            };
+
+            var json = JsonSerializer.Serialize(data);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                Recursive = true,
+                CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
+                    PointersToInclude = new JsonPointerMatch[] { "/A/B/C/Value" },
+                }),
+                Template = "{$prop-path}/{Name}"
+            }).ToArray();
+
+            Assert.AreEqual(1, samples.Length);
+            Assert.AreEqual("A/B/C/Instrument-1", samples[0].Key);
+            Assert.AreEqual(data.A.B.C.Value, samples[0].Value);
+            Assert.AreEqual(TimestampSource.CurrentTime, samples[0].TimestampSource);
+        }
+
+
+        [TestMethod]
+        public void ShouldUsePropertyPathWithoutArrayIndexesInCustomTemplate() {
+            var data = new {
+                A = new {
+                    B = new {
+                        C = new[] {
+                            new {
+                                Name = "Instrument-1",
+                                Value = 99.997
+                            }
+                        }
+                    }
+                }
+            };
+
+            var json = JsonSerializer.Serialize(data);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                Recursive = true,
+                CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() {
+                    PointersToInclude = new JsonPointerMatch[] { "/A/B/C/0/Value" },
+                }),
+                Template = "{$prop-path}/{Name}",
+                IncludeArrayIndexesInSampleKeys = false
+            }).ToArray();
+
+            Assert.AreEqual(1, samples.Length);
+            Assert.AreEqual("A/B/C/Instrument-1", samples[0].Key);
+            Assert.AreEqual(data.A.B.C[0].Value, samples[0].Value);
+            Assert.AreEqual(TimestampSource.CurrentTime, samples[0].TimestampSource);
         }
 
 
