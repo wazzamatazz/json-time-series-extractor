@@ -561,6 +561,34 @@ namespace Jaahas.Json.Tests {
 
 
         [TestMethod]
+        public void ShouldObeyRecursionDepthLimitWhenUsingAnInclusionDelegate() {
+            var testObject = new {
+                parent = new {
+                    child = new {
+                        value = 100d
+                    }
+                }
+            };
+
+            var json = JsonSerializer.Serialize(testObject);
+
+            var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
+                Recursive = true,
+                MaxDepth = 3,
+                CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
+                    AllowWildcardExpressions = true,
+                    PointersToInclude = new JsonPointerMatch[] { "/+/+/value" }
+                })
+            }).ToArray();
+
+            Assert.AreEqual(1, samples.Length);
+            Assert.AreEqual("parent/child/value", samples[0].Key);
+            Assert.AreEqual(testObject.parent.child.value, samples[0].Value);
+            Assert.AreEqual(TimestampSource.CurrentTime, samples[0].TimestampSource);
+        }
+
+
+        [TestMethod]
         public void ShouldUseFallbackTimestamp() {
             var testObject = new { 
                 value = 99
