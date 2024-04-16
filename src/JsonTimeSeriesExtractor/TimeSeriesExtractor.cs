@@ -678,12 +678,13 @@ namespace Jaahas.Json {
                 return elementStackInHierarchyOrder;
             }
 
+            // Gets the name of the current property.
             string GetFullPropertyName(bool forceLocalName = false) {
                 if (!options.Recursive || forceLocalName) {
                     return pointer.Segments.Last().Value;
                 }
 
-                if (options.IncludeArrayIndexesInSampleKeys) {
+                if (options.IncludeArrayIndexesInSampleKeys || !GetElementStackInHierarchyOrder().Any(x => x.IsArrayItem)) {
                     return string.Equals(options.PathSeparator, TimeSeriesExtractorConstants.DefaultPathSeparator, StringComparison.Ordinal)
                         ? pointer.ToString().TrimStart('/')
                         : pointer.ToString().TrimStart('/').Replace("/", options.PathSeparator);
@@ -694,6 +695,32 @@ namespace Jaahas.Json {
                 // to skip any elements that are array entries. This ensures that we don't
                 // accidentally omit object properties that use integer values as the property name.
                 return string.Join(options.PathSeparator, GetElementStackInHierarchyOrder().Where(x => x.Key != null && !x.IsArrayItem).Select(x => x.Key));
+            }
+
+            // Gets the full path for the current property, not including the actual property name.
+            string GetPropertyPath() {
+                if (!options.Recursive) {
+                    return string.Empty;
+                }
+
+                if (pointer.Segments.Length <= 1) {
+                    return string.Empty;
+                }
+
+                if (options.IncludeArrayIndexesInSampleKeys || !GetElementStackInHierarchyOrder().Any(x => x.IsArrayItem)) {
+#if NETCOREAPP
+                    return string.Join(options.PathSeparator, pointer.Segments.SkipLast(1).Select(x => x.Value));
+#else
+                    return string.Join(options.PathSeparator, pointer.Segments.Take(pointer.Segments.Length - 1).Select(x => x.Value));
+#endif
+                }
+
+#if NETCOREAPP
+                return string.Join(options.PathSeparator, GetElementStackInHierarchyOrder().Where(x => x.Key != null && !x.IsArrayItem).SkipLast(1).Select(x => x.Key));
+#else
+                var els = GetElementStackInHierarchyOrder().Where(x => x.Key != null && !x.IsArrayItem).ToArray();
+                return string.Join(options.PathSeparator, els.Take(els.Length - 1).Select(x => x.Key));
+#endif
             }
 
             if (isDefaultTemplate) {
@@ -710,6 +737,10 @@ namespace Jaahas.Json {
 
                 if (string.Equals(pName, "$prop", StringComparison.Ordinal) || string.Equals(pName, "$prop-local", StringComparison.Ordinal)) {
                     return GetFullPropertyName(string.Equals(pName, "$prop-local", StringComparison.Ordinal)) ?? m.Value;
+                }
+
+                if (string.Equals(pName, "$prop-path", StringComparison.Ordinal)) {
+                    return GetPropertyPath();
                 }
 
                 if (options.Recursive) {
