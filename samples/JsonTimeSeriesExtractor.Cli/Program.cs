@@ -44,6 +44,8 @@ using (var stream = new FileStream("data-2.json", FileMode.Open)) {
 }
 
 var options2 = new TimeSeriesExtractorOptions() {
+    // The samples are located in the "body.data" property of the JSON.
+    StartAt = "/body/data",
     // We want to extract samples from nested objects.
     Recursive = true,
     // Our JSON contains an array of samples, each with its own timestamp.
@@ -54,9 +56,12 @@ var options2 = new TimeSeriesExtractorOptions() {
     // an MQTT-style match expression to extract values from the "v" property on each object in
     // the array
     CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() {
-        PointersToInclude = ["/body/data/+/v", "/body/data/+/+/v"],
+        PointersToInclude = ["/+/v", "/+/+/v"],
         AllowWildcardExpressions = true
     }),
+    // We'll use the path to the property as the key when emitting a sample.
+    Template = "{$prop-path}",
+    // Don't include array indexes in the {$prop-path} placeholder above.
     IncludeArrayIndexesInSampleKeys = false
 };
 

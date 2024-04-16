@@ -189,10 +189,23 @@ Here is an example JSON document:
 
 When processing the `temperature` property on the JSON object using the template above, the key that would be generated would be `devices/7/instruments/temperature`.
 
-The default key template if one is not specified is simply `{prop$}` (i.e. the JSON Pointer path to the property).
+The default key template if one is not specified is simply `{$prop}` (i.e. the JSON Pointer path to the property).
 
 
-### Default Placeholder Values
+### Built-In Template Placeholders
+
+The following built-in template placeholders are available:
+
+| Placeholder | Description | Example |
+|-------------|-------------| ------- |
+| `{$prop}` | The JSON Pointer path to the property being processed, without the leading `/`. | `data/device-1/temperature` |
+| `{$prop-local}` | The local property name of the property being processed. | `temperature` |
+| `{$prop-path}` | The full JSON Pointer path to the *parent element* of the property being processed, without the leading `/`. | `data/device-1` |
+
+All other placeholders are resolved using the JSON document, or using a default placeholder value (see below). Note that, when recursive mode is disabled, the `{$prop}` and `${prop-local}` template placeholders are functionally identical, and the `{$prop-path}` placeholder will always be replaced with an empty string.
+
+
+### Default Template Placeholder Values
 
 Default template replacement values can be provided via the `GetTemplateReplacement` property on `TimeSeriesExtractorOptions`; these will be used if a property name referenced in the template does not exist on the JSON object being processed. For example:
 
@@ -285,7 +298,7 @@ It is also possible to omit array indexes from the sample keys when recursive mo
 
 ### A Note on Recursive Mode Template Replacements
 
-In recursive mode, template replacements other than `{$prop}` and `{$prop-local}` (see below) are resolved using all objects in the hierarchy from the root to the current object, and the matches are concatenated together with the configured path separator. Consider the following JSON:
+In recursive mode, template replacements other than the built-in placeholders are resolved using all objects in the hierarchy from the root to the current object, and the matches are concatenated together with the configured path separator. Consider the following JSON:
 
 ```json
 {
@@ -303,7 +316,7 @@ If you want to use the local property name in the generated key instead of the f
 
 Using the above example JSON and a template of `{location}/{$prop-local}`, the key for the nested `temperature` property would be `System A/Subsystem 1/temperature` instead of `System A/Subsystem 1/measurements/temperature`.
 
-> When recursive mode is disabled, the `{$prop}` and `${prop-local}` template placeholders are functionally identical.
+> Remember: when recursive mode is disabled, the `{$prop}` and `${prop-local}` template placeholders are functionally identical, and the `{$prop-path}` placeholder will always be replaced with an empty string.
 
 
 ### Enabling Nested Timestamps
