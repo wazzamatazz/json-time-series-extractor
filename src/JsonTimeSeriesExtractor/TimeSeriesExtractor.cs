@@ -202,16 +202,16 @@ namespace Jaahas.Json {
                 // Not a pattern match expression i.e. one or more of the match rule's pointer
                 // segments are MQTT-style wildcards. For each pointer segment, we'll check if
                 // that segment is a single-level or multi-level wildcard.
-                var matchSegments = matchRule.Pointer!.Segments.Reverse().Select((x, i) => new {
+                var matchSegments = matchRule.Pointer!.Reverse().Select((x, i) => new {
                     Segment = x,
-                    IsSingleLevelWildcard = x.Value.Equals(SingleLevelMqttWildcard, StringComparison.Ordinal),
+                    IsSingleLevelWildcard = x.Equals(SingleLevelMqttWildcard, StringComparison.Ordinal),
                     // Multi-level wildcard is only valid in the final segment, which is at index
                     // 0 in our reversed segment list.
-                    IsMultiLevelWildcard = i == 0 && x.Value.Equals(MultiLevelMqttWildcard, StringComparison.Ordinal)
+                    IsMultiLevelWildcard = i == 0 && x.Equals(MultiLevelMqttWildcard, StringComparison.Ordinal)
                 }).Reverse().ToArray();
 
                 predicates.Add((context, pointer, element) => {
-                    if (pointer.Segments.Length < matchSegments.Length) {
+                    if (pointer.Count < matchSegments.Length) {
                         // Special handling for when the element pointer has fewer segments than
                         // the match pointer.
 
@@ -231,7 +231,7 @@ namespace Jaahas.Json {
                         }
                     }
 
-                    var elementPointerIsLongerThanMatchPointer = pointer.Segments.Length > matchSegments.Length;
+                    var elementPointerIsLongerThanMatchPointer = pointer.Count > matchSegments.Length;
 
                     if (elementPointerIsLongerThanMatchPointer) {
                         // The pointer has more segments than the match pattern; definitely no
@@ -246,8 +246,8 @@ namespace Jaahas.Json {
                     // pointer, as we will have already tested the previous segments in
                     // previous iterations.
 
-                    var pointerSegmentIndex = pointer.Segments.Length - 1;
-                    var pointerSegment = pointer.Segments[pointerSegmentIndex];
+                    var pointerSegmentIndex = pointer.Count - 1;
+                    var pointerSegment = pointer[pointerSegmentIndex];
                     var matchSegment = pointerSegmentIndex >= matchSegments.Length
                         ? matchSegments[matchSegments.Length - 1]
                         : matchSegments[pointerSegmentIndex];
@@ -313,9 +313,9 @@ namespace Jaahas.Json {
                 return true;
             }
 
-            if (context.Options.Recursive && (element.ValueKind == JsonValueKind.Object || element.ValueKind == JsonValueKind.Array) && elementPointer.Segments.Length < matchPointer.Segments.Length) {
-                for (var i = 0; i < elementPointer.Segments.Length; i++) {
-                    if (!matchPointer.Segments[i].Equals(elementPointer.Segments[i])) {
+            if (context.Options.Recursive && (element.ValueKind == JsonValueKind.Object || element.ValueKind == JsonValueKind.Array) && elementPointer.Count < matchPointer.Count) {
+                for (var i = 0; i < elementPointer.Count; i++) {
+                    if (!matchPointer[i].Equals(elementPointer[i])) {
                         return false;
                     }
                 }
@@ -463,7 +463,7 @@ namespace Jaahas.Json {
             foreach (var prop in element.EnumerateObject()) {
                 context.ElementStack.Push(new ElementStackEntry(prop.Name, prop.Value, false));
 
-                foreach (var val in GetSamplesCore(context, 1)) {
+                foreach (var val in GetSamplesCore(context, 1, JsonPointer.Parse($"/{prop.Name}"))) {
                     yield return val;
                 }
 
@@ -486,10 +486,9 @@ namespace Jaahas.Json {
         /// </returns>
         private static IEnumerable<TimeSeriesSample> GetSamplesCore(
             TimeSeriesExtractorContext context,
-            int currentRecursionDepth
+            int currentRecursionDepth,
+            JsonPointer pointer
         ) {
-            var pointer = JsonPointer.Create(context.ElementStack.Where(x => x.Key != null).Reverse().Select(x => PointerSegment.Create(x.Key!)));
-
             var currentElement = context.ElementStack.Peek();
             if (!context.CanProcessElement(pointer, currentElement.Element)) {
                 yield break;
@@ -522,7 +521,7 @@ namespace Jaahas.Json {
                         foreach (var item in currentElement.Element.EnumerateObject()) {
                             context.ElementStack.Push(new ElementStackEntry(item.Name, item.Value, false));
 
-                            foreach (var val in GetSamplesCore(context, currentRecursionDepth + 1)) {
+                            foreach (var val in GetSamplesCore(context, currentRecursionDepth + 1, pointer.Combine(item.Name))) {
                                 yield return val;
                             }
 
@@ -541,7 +540,7 @@ namespace Jaahas.Json {
 
                             context.ElementStack.Push(new ElementStackEntry(index.ToString(CultureInfo.InvariantCulture), item, true));
 
-                            foreach (var val in GetSamplesCore(context, currentRecursionDepth + 1)) {
+                            foreach (var val in GetSamplesCore(context, currentRecursionDepth + 1, pointer.Combine(index))) {
                                 yield return val;
                             }
 
@@ -681,13 +680,15 @@ namespace Jaahas.Json {
             // Gets the name of the current property.
             string GetFullPropertyName(bool forceLocalName = false) {
                 if (!options.Recursive || forceLocalName) {
-                    return pointer.Segments.Last().Value;
+                    return pointer.Count == 0
+                        ? string.Empty
+                        : pointer[pointer.Count - 1];
                 }
 
                 if (options.IncludeArrayIndexesInSampleKeys || !GetElementStackInHierarchyOrder().Any(x => x.IsArrayItem)) {
                     return string.Equals(options.PathSeparator, TimeSeriesExtractorConstants.DefaultPathSeparator, StringComparison.Ordinal)
                         ? pointer.ToString().TrimStart('/')
-                        : pointer.ToString().TrimStart('/').Replace("/", options.PathSeparator);
+                        : string.Join(options.PathSeparator, pointer);
                 }
 
                 // Remove array indexes from the path. In order to do this, we construct the key
@@ -703,16 +704,14 @@ namespace Jaahas.Json {
                     return string.Empty;
                 }
 
-                if (pointer.Segments.Length <= 1) {
+                if (pointer.Count <= 1) {
                     return string.Empty;
                 }
 
                 if (options.IncludeArrayIndexesInSampleKeys || !GetElementStackInHierarchyOrder().Any(x => x.IsArrayItem)) {
-#if NETCOREAPP
-                    return string.Join(options.PathSeparator, pointer.Segments.SkipLast(1).Select(x => x.Value));
-#else
-                    return string.Join(options.PathSeparator, pointer.Segments.Take(pointer.Segments.Length - 1).Select(x => x.Value));
-#endif
+                    return string.Equals(options.PathSeparator, TimeSeriesExtractorConstants.DefaultPathSeparator, StringComparison.Ordinal)
+                        ? pointer.GetAncestor(1).ToString().TrimStart('/')
+                        : string.Join(options.PathSeparator, pointer.GetAncestor(1));
                 }
 
 #if NETCOREAPP

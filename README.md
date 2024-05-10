@@ -395,7 +395,7 @@ When processing the above document, it may be preferable to start at the `data` 
 
 ```csharp
 new TimeSeriesExtractorOptions() {
-  StartAt = JsonPointer.Parse("/data"),
+  StartAt = "/data",
   TimestampParser = element => element.ValueKind == JsonValueKind.Number
     ? DateTime.UnixEpoch.AddSeconds(element.GetInt64())
     : null

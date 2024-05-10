@@ -92,17 +92,19 @@ namespace Jaahas.Json {
             if (Pointer != null) {
                 RawValue = Pointer.ToString();
 
-                foreach (var segment in Pointer.Segments) {
-                    if (segment.Value.Equals(TimeSeriesExtractor.SingleLevelMqttWildcard, StringComparison.Ordinal)) {
+                for (var i = 0; i < Pointer.Count; i++) {
+                    var segment = Pointer[i];
+
+                    if (segment.Equals(TimeSeriesExtractor.SingleLevelMqttWildcard, StringComparison.Ordinal)) {
                         _containsSingleLevelMqttWildcardSegment = true;
                     }
-                    else if (segment.Value.Equals(TimeSeriesExtractor.MultiLevelMqttWildcard, StringComparison.Ordinal) && segment.Equals(Pointer.Segments[Pointer.Segments.Length - 1])) {
+                    else if (i == Pointer.Count - 1 && segment.Equals(TimeSeriesExtractor.MultiLevelMqttWildcard, StringComparison.Ordinal)) {
                         _containsMultiLevelMqttWildcardSegment = true;
                     }
-                    else if (segment.Value.Contains(TimeSeriesExtractor.SingleCharacterWildcard)) {
+                    else if (segment.Contains(TimeSeriesExtractor.SingleCharacterWildcard)) {
                         _containsSingleCharacterPatternWildcard = true;
                     }
-                    else if (segment.Value.Contains(TimeSeriesExtractor.MultiCharacterWildcard)) {
+                    else if (segment.Contains(TimeSeriesExtractor.MultiCharacterWildcard)) {
                         _containsMultiCharacterPatternWildcard = true;
                     }
                 }
