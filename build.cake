@@ -15,11 +15,11 @@ const string VersionFile = "./build/version.json";
 // --target=<TARGET>
 //   The Cake target to run. 
 //     Default: Test
-//     Possible Values: Clean, Restore, Build, Test, Pack
+//     Possible Values: Clean, Restore, Build, Test, Pack, BillOfMaterials
 //
 // --configuration=<CONFIGURATION>
 //   The MSBuild configuration to use. 
-//     Default: Debug
+//     Default: Release for Pack and BillOfMaterials targets; otherwise, Debug
 //
 // --clean
 //   Specifies that this is a rebuild rather than an incremental build. All artifact, bin, and test 
@@ -41,17 +41,27 @@ const string VersionFile = "./build/version.json";
 //   The build counter. This is used when generating version numbers for the build.
 //
 // --build-metadata=<METADATA>
-//   Additional build metadata that will be included in the information version number generated 
+//   Additional build metadata that will be included in the informational version number generated 
 //   for compiled assemblies.
 //
 // --property=<PROPERTY>
 //   Specifies an additional property to pass to MSBuild during Build and Pack targets. The value
 //   must be specified using a '<NAME>=<VALUE>' format e.g. --property="NoWarn=CS1591". This 
 //   argument can be specified multiple times.
+//
+// --github-username=<USERNAME>
+//   Specifies the GitHub username to use when making authenticated API calls to GitHub while 
+//   running the BillOfMaterials target. You must specify the --github-token argument as well when 
+//   specifying this argument.
+//
+// --github-token=<PERSONAL ACCESS TOKEN>
+//   Specifies the GitHub personal access token to use when making authenticated API calls to 
+//   GitHub while running the BillOfMaterials target. You must specify the --github-username 
+//   argument as well when specifying this argument.
 // 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#load nuget:?package=Jaahas.Cake.Extensions&version=2.0.1
+#load nuget:?package=Jaahas.Cake.Extensions&version=2.1.0
 
 // Bootstrap build context and tasks.
 Bootstrap(DefaultSolutionFile, VersionFile);
