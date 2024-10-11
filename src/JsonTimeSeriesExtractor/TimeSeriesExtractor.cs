@@ -152,7 +152,7 @@ namespace Jaahas.Json {
             var predicates = new List<JsonPointerMatchDelegate>();
 
             foreach (var matchRule in matchRules) {
-                if (matchRule == null) {
+                if (matchRule.Pointer == null || string.IsNullOrWhiteSpace(matchRule.RawValue)) {
                     continue;
                 }
 
