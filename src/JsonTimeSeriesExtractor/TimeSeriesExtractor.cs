@@ -376,8 +376,8 @@ namespace Jaahas.Json {
                 Validator.ValidateObject(options, new ValidationContext(options), true);
             }
 
-            if (options.StartAt != null) {
-                var newElement = options.StartAt!.Pointer.Evaluate(element);
+            if (options.StartAt.HasValue) {
+                var newElement = options.StartAt.Value.Pointer.Evaluate(element);
                 if (newElement == null) {
                     yield break;
                 }
@@ -444,7 +444,7 @@ namespace Jaahas.Json {
 
             ParsedTimestamp defaultTimestamp;
 
-            if (context.Options.TimestampProperty == null || !TryGetTimestamp(element, context.Options.TimestampProperty, context.Options, out var sampleTime)) {
+            if (!TryGetTimestamp(element, context.Options.TimestampProperty, context.Options, out var sampleTime)) {
                 var ts = options.GetDefaultTimestamp?.Invoke();
                 if (ts == null) {
                     defaultTimestamp = new ParsedTimestamp(DateTimeOffset.UtcNow, TimestampSource.CurrentTime, null);
@@ -514,7 +514,7 @@ namespace Jaahas.Json {
                     case JsonValueKind.Object:
                         var popTimestamp = false;
                         if (context.Options.AllowNestedTimestamps && context.Options.TimestampProperty != null && TryGetTimestamp(currentElement.Element, context.Options.TimestampProperty, context.Options, out var sampleTime)) {
-                            context.TimestampStack.Push(new ParsedTimestamp(sampleTime, TimestampSource.Document, pointer.Combine(context.Options.TimestampProperty)));
+                            context.TimestampStack.Push(new ParsedTimestamp(sampleTime, TimestampSource.Document, pointer.Combine(context.Options.TimestampProperty!)));
                             popTimestamp = true;
                         }
 
@@ -602,10 +602,10 @@ namespace Jaahas.Json {
         ///   <see langword="true"/> if the timestamp was successfully extracted, or 
         ///   <see langword="false"/> otherwise.
         /// </returns>
-        private static bool TryGetTimestamp(JsonElement element, JsonPointer pointer, TimeSeriesExtractorOptions options, out DateTimeOffset value) {
+        private static bool TryGetTimestamp(JsonElement element, JsonPointer? pointer, TimeSeriesExtractorOptions options, out DateTimeOffset value) {
             value = default;
 
-            if (element.ValueKind != JsonValueKind.Object || options.TimestampProperty == null) {
+            if (pointer == null || element.ValueKind != JsonValueKind.Object || options.TimestampProperty == null) {
                 return false;
             }
 
