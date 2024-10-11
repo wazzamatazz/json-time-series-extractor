@@ -11,12 +11,17 @@ namespace Jaahas.Json {
     /// literal string.
     /// </summary>
     [TypeConverter(typeof(JsonPointerLiteralTypeConverter))]
-    public sealed class JsonPointerLiteral {
+    public readonly struct JsonPointerLiteral : IEquatable<JsonPointerLiteral> {
 
         /// <summary>
         /// The JSON Pointer.
         /// </summary>
-        public JsonPointer Pointer { get; }
+        private readonly JsonPointer _pointer;
+
+        /// <summary>
+        /// The JSON Pointer.
+        /// </summary>
+        public JsonPointer Pointer => _pointer ?? JsonPointer.Empty;
 
 
         /// <summary>
@@ -29,7 +34,7 @@ namespace Jaahas.Json {
         ///   <paramref name="pointer"/> is <see langword="null"/>.
         /// </exception>
         public JsonPointerLiteral(JsonPointer pointer) {
-            Pointer = pointer ?? throw new ArgumentNullException(nameof(pointer));
+            _pointer = pointer ?? throw new ArgumentNullException(nameof(pointer));
         }
 
 
@@ -50,7 +55,7 @@ namespace Jaahas.Json {
                 throw new ArgumentNullException(nameof(pointer));
             }
 
-            Pointer = JsonPointer.Parse(pointer);
+            _pointer = JsonPointer.Parse(pointer);
         }
 
 
@@ -113,13 +118,49 @@ namespace Jaahas.Json {
 
 
         /// <inheritdoc />
+        public bool Equals(JsonPointerLiteral other) => Pointer.Equals(other.Pointer);
+
+
+        /// <inheritdoc />
         public override bool Equals(object? obj) => obj is JsonPointerLiteral other
-            ? Pointer.Equals(other.Pointer)
-            : Pointer.Equals(obj);
+            ? Equals(other)
+            : obj is JsonPointer pointer
+                ? Pointer.Equals(pointer)
+                : false;
 
 
         /// <inheritdoc />
         public override string ToString() => Pointer.ToString();
+
+
+        /// <summary>
+        /// Tests if two <see cref="JsonPointerLiteral"/> instances are equal.
+        /// </summary>
+        /// <param name="left">
+        ///   The first <see cref="JsonPointerLiteral"/> instance.
+        /// </param>
+        /// <param name="right">
+        ///   The second <see cref="JsonPointerLiteral"/> instance.
+        /// </param>
+        /// <returns>
+        ///   <see langword="true"/> if the two instances are equal; otherwise, <see langword="false"/>.
+        /// </returns>
+        public static bool operator ==(JsonPointerLiteral left, JsonPointerLiteral right) => left.Equals(right);
+
+
+        /// <summary>
+        /// Tests if two <see cref="JsonPointerLiteral"/> instances are not equal.
+        /// </summary>
+        /// <param name="left">
+        ///   The first <see cref="JsonPointerLiteral"/> instance.
+        /// </param>
+        /// <param name="right">
+        ///   The second <see cref="JsonPointerLiteral"/> instance.
+        /// </param>
+        /// <returns>
+        ///   <see langword="true"/> if the two instances are not equal; otherwise, <see langword="false"/>.
+        /// </returns>
+        public static bool operator !=(JsonPointerLiteral left, JsonPointerLiteral right) => !left.Equals(right);
 
 
         /// <summary>
@@ -137,7 +178,7 @@ namespace Jaahas.Json {
         /// <param name="pointer">
         ///   The JSON Pointer.
         /// </param>
-        public static implicit operator JsonPointerLiteral(JsonPointer pointer) => pointer == null ? null! : new JsonPointerLiteral(pointer);
+        public static implicit operator JsonPointerLiteral(JsonPointer pointer) => pointer == null ? default : new JsonPointerLiteral(pointer);
 
 
         /// <summary>
@@ -149,7 +190,7 @@ namespace Jaahas.Json {
         /// <exception cref="PointerParseException">
         ///   <paramref name="pointer"/> is not a valid JSON Pointer.
         /// </exception>
-        public static implicit operator JsonPointerLiteral(string pointer) => pointer == null ? null! : new JsonPointerLiteral(pointer);
+        public static implicit operator JsonPointerLiteral(string pointer) => pointer == null ? default : new JsonPointerLiteral(pointer);
 
 
         /// <summary>
