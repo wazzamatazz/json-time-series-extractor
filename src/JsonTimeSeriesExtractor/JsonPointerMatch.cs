@@ -10,7 +10,7 @@ namespace Jaahas.Json {
     /// <see cref="JsonPointerMatch"/> describes a rule for matching JSON Pointer paths.
     /// </summary>
     [TypeConverter(typeof(JsonPointerMatchTypeConverter))]
-    public sealed class JsonPointerMatch {
+    public readonly struct JsonPointerMatch {
 
         /// <summary>
         /// The JSON Pointer for the rule, if a valid JSON Pointer was specified when creating the 
@@ -25,7 +25,7 @@ namespace Jaahas.Json {
         /// <summary>
         /// The raw value of the JSON Pointer or pattern match expression.
         /// </summary>
-        public string RawValue { get; } = default!;
+        public string? RawValue { get; }
 
         /// <summary>
         /// Specifies if <see cref="RawValue"/> contains a single-character pattern match wildcard.
@@ -88,7 +88,12 @@ namespace Jaahas.Json {
             }
 
             Pointer = pointer;
-            
+            _containsSingleLevelMqttWildcardSegment = false;
+            _containsMultiLevelMqttWildcardSegment = false;
+            _containsSingleCharacterPatternWildcard = false;
+            _containsMultiCharacterPatternWildcard = false;
+            RawValue = null;
+
             if (Pointer != null) {
                 RawValue = Pointer.ToString();
 
@@ -219,7 +224,7 @@ namespace Jaahas.Json {
         /// <param name="pointer">
         ///   The JSON Pointer.
         /// </param>
-        public static implicit operator JsonPointerMatch(JsonPointer pointer) => pointer == null ? null! : new JsonPointerMatch(pointer);
+        public static implicit operator JsonPointerMatch(JsonPointer pointer) => new JsonPointerMatch(pointer ?? JsonPointer.Empty);
 
 
         /// <summary>
@@ -232,7 +237,7 @@ namespace Jaahas.Json {
         ///   <paramref name="pointer"/> is not a valid JSON Pointer or a pattern match wildcard 
         ///   expression.
         /// </exception>
-        public static implicit operator JsonPointerMatch(string pointer) => pointer == null ? null! : new JsonPointerMatch(pointer);
+        public static implicit operator JsonPointerMatch(string pointer) => new JsonPointerMatch(pointer);
 
 
         /// <summary>
