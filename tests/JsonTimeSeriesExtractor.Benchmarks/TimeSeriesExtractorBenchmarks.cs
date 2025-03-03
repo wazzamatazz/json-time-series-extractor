@@ -10,13 +10,17 @@ namespace JsonTimeSeriesExtractor.Benchmarks;
 [MemoryDiagnoser]
 public class TimeSeriesExtractorBenchmarks {
 
-    private readonly TimeSeriesExtractorOptions _options;
+    private readonly TimeSeriesExtractorOptions _objectPayloadJsonOptions;
 
-    private readonly JsonElement _json;
+    private readonly JsonElement _objectPayloadJson;
+    
+    private readonly TimeSeriesExtractorOptions _arrayPayloadJsonOptions;
+
+    private readonly JsonElement _arrayPayloadJson;
 
 
     public TimeSeriesExtractorBenchmarks() {
-        var deviceSample = new {
+        var objectPayload = new {
             Data = new {
                 Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
                 SignalStrength = -75,
@@ -46,18 +50,59 @@ public class TimeSeriesExtractorBenchmarks {
             }
         };
 
-        _json = JsonSerializer.SerializeToElement(deviceSample);
+        _objectPayloadJson = JsonSerializer.SerializeToElement(objectPayload);
 
-        _options = new TimeSeriesExtractorOptions {
+        _objectPayloadJsonOptions = new TimeSeriesExtractorOptions {
             Recursive = true,
             TimestampProperty = "/Data/Timestamp",
+        };
+
+        var arrayPayload = new {
+            Data = new [] {
+                new {
+                    Source = "Instrument-1",
+                    Timestamp = DateTimeOffset.Parse("2024-04-13T10:01:47Z"),
+                    Value = 1019D
+                },
+                new {
+                    Source = "Instrument-2",
+                    Timestamp = DateTimeOffset.Parse("2024-04-13T09:59:51Z"),
+                    Value = 23.7
+                },
+                new {
+                    Source = "Instrument-2",
+                    Timestamp = DateTimeOffset.Parse("2024-04-13T10:00:32Z"),
+                    Value = 23.6
+                }
+            }
+        };
+        
+        _arrayPayloadJson = JsonSerializer.SerializeToElement(arrayPayload);
+        
+        _arrayPayloadJsonOptions = new TimeSeriesExtractorOptions {
+            Recursive = true,
+            AllowNestedTimestamps = true,
+            TimestampProperty = "/Timestamp",
+            CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
+                PointersToInclude = ["/Data/+/Value"],
+                AllowWildcardExpressions = true
+            }),
+            Template = "{Source}"
         };
     }
     
     
     [Benchmark]
-    public void ExtractTimeSeries() {
-        foreach (var sample in TimeSeriesExtractor.GetSamples(_json, _options)) {
+    public void ExtractTimeSeriesFromComplexObject() {
+        foreach (var sample in TimeSeriesExtractor.GetSamples(_objectPayloadJson, _objectPayloadJsonOptions)) {
+            // No-op
+        }
+    }
+    
+    
+    [Benchmark]
+    public void ExtractTimeSeriesFromArray() {
+        foreach (var sample in TimeSeriesExtractor.GetSamples(_arrayPayloadJson, _arrayPayloadJsonOptions)) {
             // No-op
         }
     }
