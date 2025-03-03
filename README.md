@@ -296,6 +296,11 @@ The samples emitted would be:
 It is also possible to omit array indexes from the sample keys when recursive mode is enabled; see below for more details.
 
 
+### Maximum Recursion Depth
+
+The `TimeSeriesExtractorOptions.MaxDepth` property controls the maximum depth of recursion when processing nested objects. By default, this property is set to `5`. If the maximum recursion depth is reached, the properties of the document at that level will be processed as if recursive mode was disabled.
+
+
 ### A Note on Recursive Mode Template Replacements
 
 In recursive mode, template replacements other than the built-in placeholders are resolved using all objects in the hierarchy from the root to the current object, and the matches are concatenated together with the configured path separator. Consider the following JSON:
