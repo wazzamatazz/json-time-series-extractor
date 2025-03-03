@@ -7,7 +7,7 @@
   <Import Project="$(ParentProject)" Condition=" '$(ParentProject)' != '' " /> 
 
   <PropertyGroup>
-    <LangVersion>9.0</LangVersion>
+    <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <Authors>Graham Watts</Authors>
     <PackageProjectUrl>https://github.com/wazzamatazz/json-time-series-extractor</PackageProjectUrl>
