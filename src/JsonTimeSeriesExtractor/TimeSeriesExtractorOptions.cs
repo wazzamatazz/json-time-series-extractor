@@ -57,7 +57,7 @@ namespace Jaahas.Json {
         /// </para>
         /// 
         /// <para>
-        ///   Use the <see cref="IncludeProperty"/> delegate to ignore JSON properties that are 
+        ///   Use the <see cref="CanProcessElement"/> delegate to ignore JSON properties that are 
         ///   not required or are used only for metadata purposes, and the <see cref="GetTemplateReplacement"/> 
         ///   delegate to define default replacement values for placeholders that are not found in 
         ///   the JSON object.
@@ -300,7 +300,8 @@ namespace Jaahas.Json {
         /// </para>
         /// 
         /// <para>
-        ///   A <see cref="MaxDepth"/> of less than one specifies that there is no recursion limit.
+        ///   <see cref="TimeSeriesExtractorConstants.DefaultMaxDepth"/> will be used if a <see cref="MaxDepth"/>
+        ///   of less than one is specified.
         /// </para>
         /// 
         /// </remarks>
@@ -402,7 +403,7 @@ namespace Jaahas.Json {
         /// <inheritdoc/>
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) {
             if (string.IsNullOrWhiteSpace(Template)) {
-                yield return new ValidationResult($"The template cannot be null or white space.", new[] { nameof(Template) });
+                yield return new ValidationResult("The template cannot be null or white space.", [nameof(Template)]);
             }
         }
 
