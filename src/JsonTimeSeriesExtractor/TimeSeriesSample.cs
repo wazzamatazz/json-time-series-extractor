@@ -41,7 +41,7 @@ namespace Jaahas.Json {
         ///   The sample value.
         /// </param>
         /// <param name="timestampSource">
-        ///   A flag describing the source of the specifed <paramref name="timestamp"/>.
+        ///   A flag describing the source of the specified <paramref name="timestamp"/>.
         /// </param>
         public TimeSeriesSample(string key, DateTimeOffset timestamp, object? value, TimestampSource timestampSource = TimestampSource.Unspecified) {
             Key = key ?? throw new ArgumentNullException(nameof(key));

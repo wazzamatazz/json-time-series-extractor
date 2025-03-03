@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
@@ -191,7 +192,7 @@ namespace Jaahas.Json {
                         // match against the entire pointer string instead of doing a
                         // segment-by-segment match like we do with MQTT-style expressions so we
                         // don't want to accidentally prune non-matching pointers too early.
-                        if (context.Options.Recursive && (context.Options.MaxDepth < 1 || context.ElementStack.Count < context.Options.MaxDepth) && (element.ValueKind == JsonValueKind.Object || element.ValueKind == JsonValueKind.Array)) {
+                        if (context.Options.Recursive && (context.ElementStack.Count < context.MaxDepth) && (element.ValueKind == JsonValueKind.Object || element.ValueKind == JsonValueKind.Array)) {
                             return true;
                         }
                         return regex.IsMatch(pointer.ToString());
@@ -440,7 +441,7 @@ namespace Jaahas.Json {
         ///   The parsed tag values.
         /// </returns>
         private static IEnumerable<TimeSeriesSample> GetSamplesCore(JsonElement element, TimeSeriesExtractorOptions options) {
-            var context = new TimeSeriesExtractorContext(options);
+            using var context = new TimeSeriesExtractorContext(options);
 
             ParsedTimestamp defaultTimestamp;
 
@@ -463,11 +464,14 @@ namespace Jaahas.Json {
             foreach (var prop in element.EnumerateObject()) {
                 context.ElementStack.Push(new ElementStackEntry(prop.Name, prop.Value, false));
 
-                foreach (var val in GetSamplesCore(context, 1, JsonPointer.Parse($"/{prop.Name}"))) {
-                    yield return val;
+                try {
+                    foreach (var val in GetSamplesCore(context, 1, JsonPointer.Parse("/" + prop.Name))) {
+                        yield return val;
+                    }
                 }
-
-                context.ElementStack.Pop();
+                finally {
+                    context.ElementStack.Pop();
+                }
             }
         }
 
@@ -480,6 +484,9 @@ namespace Jaahas.Json {
         /// </param>
         /// <param name="currentRecursionDepth">
         ///   The recursion depth for the current iteration of the method.
+        /// </param>
+        /// <param name="pointer">
+        ///   The JSON pointer for the element that is currently being processed.
         /// </param>
         /// <returns>
         ///   The extracted tag values.
@@ -494,7 +501,7 @@ namespace Jaahas.Json {
                 yield break;
             }
 
-            if (!context.Options.Recursive || (context.Options.MaxDepth > 0 && currentRecursionDepth >= context.Options.MaxDepth)) {
+            if (!context.Options.Recursive || currentRecursionDepth >= context.MaxDepth) {
                 // We are not using recursive mode, or we have exceeded the maximum recursion
                 // depth; build a sample with the current element. When we have exceeded the
                 // maximum recursion depth, the value will be the serialized JSON of the element
@@ -560,19 +567,15 @@ namespace Jaahas.Json {
                 }
             }
 
-            TimeSeriesSample? BuildSample(JsonPointer pointer, JsonElement element) {
+            
+            TimeSeriesSample? BuildSample(JsonPointer ptr, JsonElement element) {
                 // Check if this element should be included.
-                if (!context.CanProcessElement(pointer, element)) {
+                if (!context.CanProcessElement(ptr, element)) {
                     return null;
                 }
 
                 try {
-                    var key = BuildSampleKeyFromTemplate(
-                        context.Options,
-                        pointer,
-                        context.ElementStack,
-                        context.IsDefaultSampleKeyTemplate);
-
+                    var key = BuildSampleKeyFromTemplate(context, ptr);
                     var timestamp = context.TimestampStack.Peek();
                     return BuildSampleFromJsonValue(timestamp.Timestamp, timestamp.Source, key, element);
                 }
@@ -643,38 +646,149 @@ namespace Jaahas.Json {
 
 
         /// <summary>
-        /// Builds a key for a <see cref="TimeSeriesSample"/> from the specified template.
+        /// Builds a key for a <see cref="TimeSeriesSample"/> from the template defined in the extractor context options.
         /// </summary>
-        /// <param name="options">
-        ///   The extraction options.
+        /// <param name="context">
+        ///   The extractor context.
         /// </param>
         /// <param name="pointer">
         ///   The JSON pointer for the element that is currently being processed.
-        /// </param>
-        /// <param name="elementStack">
-        ///   The stack of objects with the current object being processed at the top and the root 
-        ///   object in the hierarchy at the bottom.
-        /// </param>
-        /// <param name="isDefaultTemplate">
-        ///   Specifies if <paramref name="template"/> is the default sample key template.
         /// </param>
         /// <returns>
         ///   The generated key.
         /// </returns>
         private static string BuildSampleKeyFromTemplate(
-            TimeSeriesExtractorOptions options,
-            JsonPointer pointer,
-            IEnumerable<ElementStackEntry> elementStack,
-            bool isDefaultTemplate
+            TimeSeriesExtractorContext context,
+            JsonPointer pointer
             
         ) {
             ElementStackEntry[] elementStackInHierarchyOrder = null!;
+            ElementStackEntry[] elementStackInHierarchyOrderNoArrays = null!;
+            var elementStackInHierarchyOrderNoArraysCount = 0;
+            
+            var options = context.Options;
+            
+            try {
+                if (context.IsDefaultSampleKeyTemplate) {
+                    // Fast path for default template.
+                    return GetFullPropertyName();
+                }
 
-            ElementStackEntry[] GetElementStackInHierarchyOrder() {
-                elementStackInHierarchyOrder ??= options.Recursive
-                    ? elementStack.Reverse().ToArray()
-                    : Array.Empty<ElementStackEntry>();
-                return elementStackInHierarchyOrder;
+                if (!context.SampleKeyTemplateContainsPlaceholders) {
+                    // No template replacements: this would be unusual but return the template as-is.
+                    return options.Template;
+                }
+                
+                return GetSampleKeyTemplateMatcher().Replace(options.Template, m => {
+                    var pName = m.Groups["property"].Value;
+
+                    if (string.Equals(pName, "$prop", StringComparison.Ordinal) || string.Equals(pName, "$prop-local", StringComparison.Ordinal)) {
+                        return GetFullPropertyName(string.Equals(pName, "$prop-local", StringComparison.Ordinal));
+                    }
+
+                    if (string.Equals(pName, "$prop-path", StringComparison.Ordinal)) {
+                        return GetPropertyPath();
+                    }
+
+                    if (options.Recursive) {
+                        // Recursive mode: try and get matching replacements from every object in the
+                        // stack (starting from the root) and concatenate them using the path separator.
+
+                        var hierarchy = GetElementStackInHierarchyOrder();
+                        var propVals = new List<string>(hierarchy.Count);
+
+                        foreach (var stackEntry in hierarchy) {
+                            if (stackEntry.Element.ValueKind != JsonValueKind.Object) {
+                                continue;
+                            }
+
+                            if (!stackEntry.Element.TryGetProperty(pName, out var prop)) {
+                                continue;
+                            }
+
+                            propVals.Add(GetElementDisplayValue(prop));
+                        }
+
+                        if (propVals.Count > 0) {
+                            return string.Join(options.PathSeparator, propVals);
+                        }
+                    }
+                    else {
+                        // Non-recursive mode: use the nearest object to the item we are processing to
+                        // try and get the referenced property.
+
+                        var closestObject = context.ElementStack.FirstOrDefault(x => x.Element.ValueKind == JsonValueKind.Object);
+                        if (closestObject.Element.ValueKind == JsonValueKind.Object && closestObject.Element.TryGetProperty(pName, out var prop)) {
+                            return GetElementDisplayValue(prop);
+                        }
+                    }
+
+                    // No match in the object stack: try and find a default replacement.
+                    var replacement = options.GetTemplateReplacement?.Invoke(pName);
+                    if (replacement == null && !options.AllowUnresolvedTemplateReplacements) {
+                        throw new InvalidOperationException(string.Format(CultureInfo.CurrentCulture, Resources.Error_UnresolvedTemplateParameter, pName));
+                    }
+
+                    // Return the replacement if available, otherwise return the original placeholder
+                    // text.
+                    return replacement ?? m.Value;
+                });
+            }
+            finally {
+                if (elementStackInHierarchyOrder != null) {
+                    ArrayPool<ElementStackEntry>.Shared.Return(elementStackInHierarchyOrder);
+                }
+                if (elementStackInHierarchyOrderNoArrays != null) {
+                    ArrayPool<ElementStackEntry>.Shared.Return(elementStackInHierarchyOrderNoArrays);
+                }
+            }
+            
+            static string GetElementDisplayValue(JsonElement el) => el.ValueKind == JsonValueKind.String 
+                ? el.GetString()! 
+                : el.GetRawText();
+            
+            ArraySegment<ElementStackEntry> GetElementStackInHierarchyOrder() {
+                if (elementStackInHierarchyOrder == null) {
+                    if (!options.Recursive || context.ElementStack.Count == 0) {
+#if NETCOREAPP
+                        return ArraySegment<ElementStackEntry>.Empty;
+#else
+                        return default;
+#endif
+                    }
+                    
+                    elementStackInHierarchyOrder = ArrayPool<ElementStackEntry>.Shared.Rent(context.ElementStack.Count);
+                    var index = 0;
+                    foreach (var item in context.ElementStack) {
+                        elementStackInHierarchyOrder[index++] = item;
+                    }
+                }
+                
+                return new ArraySegment<ElementStackEntry>(elementStackInHierarchyOrder, 0, context.ElementStack.Count);
+            }
+
+            ArraySegment<ElementStackEntry> GetElementStackInHierarchyOrderNoArrays() {
+                if (elementStackInHierarchyOrderNoArrays == null) {
+                    if (!options.Recursive || context.ElementStack.Count == 0) {
+#if NETCOREAPP
+                        return ArraySegment<ElementStackEntry>.Empty;
+#else
+                        return default;
+#endif
+                    }
+                    
+                    var orderedStack = GetElementStackInHierarchyOrder();
+                    elementStackInHierarchyOrderNoArrays = ArrayPool<ElementStackEntry>.Shared.Rent(orderedStack.Count);
+                    foreach (var item in orderedStack) {
+                        if (item.Key == null || item.IsArrayItem) {
+                            continue;
+                        }
+                        
+                        elementStackInHierarchyOrderNoArrays[elementStackInHierarchyOrderNoArraysCount++] = item;
+                    }
+                }
+                
+                return new ArraySegment<ElementStackEntry>(elementStackInHierarchyOrderNoArrays, 0, elementStackInHierarchyOrderNoArraysCount);
             }
 
             // Gets the name of the current property.
@@ -695,92 +809,38 @@ namespace Jaahas.Json {
                 // from the element stack instead of using the pointer directly. This allows us
                 // to skip any elements that are array entries. This ensures that we don't
                 // accidentally omit object properties that use integer values as the property name.
-                return string.Join(options.PathSeparator, GetElementStackInHierarchyOrder().Where(x => x.Key != null && !x.IsArrayItem).Select(x => x.Key));
+                return string.Join(options.PathSeparator, GetElementStackInHierarchyOrderNoArrays().Select(x => x.Key));
             }
 
             // Gets the full path for the current property, not including the actual property name.
             string GetPropertyPath() {
-                if (!options.Recursive) {
+                if (!options.Recursive || pointer.Count <= 1) {
                     return string.Empty;
                 }
+                
+                var useDirectPointer = options.IncludeArrayIndexesInSampleKeys || !GetElementStackInHierarchyOrder().Any(x => x.IsArrayItem);
+                if (useDirectPointer) {
+                    var ancestor = pointer.GetAncestor(1);
+                    if (string.Equals(options.PathSeparator, TimeSeriesExtractorConstants.DefaultPathSeparator, StringComparison.Ordinal)) {
+                        var ancestorString = ancestor.ToString();
+                        return ancestorString.Length > 0 && ancestorString[0] == '/' 
+                            ? ancestorString.Substring(1) 
+                            : ancestorString;
+                    }
+                    return string.Join(options.PathSeparator, ancestor);
+                }
 
-                if (pointer.Count <= 1) {
+                var filtered = GetElementStackInHierarchyOrderNoArrays();
+                if (filtered.Count == 0) {
                     return string.Empty;
                 }
-
-                if (options.IncludeArrayIndexesInSampleKeys || !GetElementStackInHierarchyOrder().Any(x => x.IsArrayItem)) {
-                    return string.Equals(options.PathSeparator, TimeSeriesExtractorConstants.DefaultPathSeparator, StringComparison.Ordinal)
-                        ? pointer.GetAncestor(1).ToString().TrimStart('/')
-                        : string.Join(options.PathSeparator, pointer.GetAncestor(1));
-                }
-
+                
 #if NETCOREAPP
-                return string.Join(options.PathSeparator, GetElementStackInHierarchyOrder().Where(x => x.Key != null && !x.IsArrayItem).SkipLast(1).Select(x => x.Key));
+                return string.Join(options.PathSeparator, filtered.SkipLast(1).Select(x => x.Key));
 #else
-                var els = GetElementStackInHierarchyOrder().Where(x => x.Key != null && !x.IsArrayItem).ToArray();
-                return string.Join(options.PathSeparator, els.Take(els.Length - 1).Select(x => x.Key));
+                return string.Join(options.PathSeparator, filtered.Take(filtered.Count - 1).Select(x => x.Key));
 #endif
             }
-
-            if (isDefaultTemplate) {
-                // Fast path for default template.
-                return GetFullPropertyName();
-            }
-
-            var closestObject = elementStack.FirstOrDefault(x => x.Element.ValueKind == JsonValueKind.Object);
-
-            string GetElementDisplayValue(JsonElement el) => el.ValueKind == JsonValueKind.String ? el.GetString()! : el.GetRawText();
-
-            return GetSampleKeyTemplateMatcher().Replace(options.Template, m => {
-                var pName = m.Groups["property"].Value;
-
-                if (string.Equals(pName, "$prop", StringComparison.Ordinal) || string.Equals(pName, "$prop-local", StringComparison.Ordinal)) {
-                    return GetFullPropertyName(string.Equals(pName, "$prop-local", StringComparison.Ordinal)) ?? m.Value;
-                }
-
-                if (string.Equals(pName, "$prop-path", StringComparison.Ordinal)) {
-                    return GetPropertyPath();
-                }
-
-                if (options.Recursive) {
-                    // Recursive mode: try and get matching replacements from every object in the
-                    // stack (starting from the root) and concatenate them using the path separator.
-
-                    var propVals = new List<string>();
-                    
-                    foreach (var stackEntry in GetElementStackInHierarchyOrder()) {
-                        if (stackEntry.Element.ValueKind == JsonValueKind.Object) {
-                            if (!stackEntry.Element.TryGetProperty(pName, out var prop)) {
-                                continue;
-                            }
-
-                            propVals.Add(GetElementDisplayValue(prop));
-                        }
-                    }
-
-                    if (propVals.Count > 0) {
-                        return string.Join(options.PathSeparator, propVals);
-                    }
-                }
-                else {
-                    // Non-recursive mode: use the nearest object to the item we are processing to
-                    // try and get the referenced property.
-
-                    if (closestObject.Element.ValueKind == JsonValueKind.Object && closestObject.Element.TryGetProperty(pName, out var prop)) {
-                        return GetElementDisplayValue(prop);
-                    }
-                }
-
-                // No match in the object stack: try and find a default replacement.
-                var replacement = options.GetTemplateReplacement?.Invoke(pName);
-                if (replacement == null && !options.AllowUnresolvedTemplateReplacements) {
-                    throw new InvalidOperationException(string.Format(CultureInfo.CurrentCulture, Resources.Error_UnresolvedTemplateParameter, pName));
-                }
-
-                // Return the replacement if available, otherwise return the original placeholder
-                // text.
-                return replacement ?? m.Value;
-            });
         }
 
 
@@ -808,31 +868,15 @@ namespace Jaahas.Json {
             string key,
             JsonElement value
         ) {
-            object? val;
-
-            switch (value.ValueKind) {
-                case JsonValueKind.Number:
-                    val = value.GetDouble();
-                    break;
-                case JsonValueKind.String:
-                    val = value.GetString();
-                    break;
-                case JsonValueKind.True:
-                    val = true;
-                    break;
-                case JsonValueKind.False:
-                    val = false;
-                    break;
-                case JsonValueKind.Object:
-                case JsonValueKind.Array:
-                    val = value.GetRawText();
-                    break;
-                default:
-                    val = null;
-                    break;
-            }
-
-            return new TimeSeriesSample(key, sampleTime, val, sampleTimeSource);
+            return new TimeSeriesSample(key, sampleTime, value.ValueKind switch {
+                JsonValueKind.Number => value.GetDouble(),
+                JsonValueKind.String => value.GetString()!,
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.Object => value.GetRawText(),
+                JsonValueKind.Array => value.GetRawText(),
+                _ => null
+            }, sampleTimeSource);
         }
 
     }

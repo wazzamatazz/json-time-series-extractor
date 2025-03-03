@@ -204,7 +204,7 @@ namespace Jaahas.Json {
             /// <remarks>
             ///   This field is initialized using a so-called poor man's lazy in <see cref="GetStandardValues(ITypeDescriptorContext)"/>.
             /// </remarks>
-            private static StandardValuesCollection? _standardValues;
+            private static StandardValuesCollection? s_standardValues;
 
 
             /// <inheritdoc />
@@ -265,7 +265,7 @@ namespace Jaahas.Json {
 
             /// <inheritdoc/>
             public override StandardValuesCollection GetStandardValues(ITypeDescriptorContext? context) {
-                return _standardValues ??= new StandardValuesCollection(new[] { JsonPointer.Empty });
+                return s_standardValues ??= new StandardValuesCollection(new[] { JsonPointer.Empty });
             }
 
 
