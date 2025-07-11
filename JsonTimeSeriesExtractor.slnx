@@ -1,0 +1,30 @@
+<Solution>
+  <Folder Name="/build/">
+    <File Path="build/Copyright.props" />
+    <File Path="build/NetFX.targets" />
+    <File Path="build/version.json" />
+  </Folder>
+  <Folder Name="/common/">
+    <File Path=".editorconfig" />
+    <File Path=".gitattributes" />
+    <File Path=".gitignore" />
+    <File Path="build.cake" />
+    <File Path="build.ps1" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Build.targets" />
+    <File Path="Directory.Packages.props" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/samples/">
+    <File Path="samples/Directory.Build.props" />
+    <Project Path="samples/JsonTimeSeriesExtractor.Cli/JsonTimeSeriesExtractor.Cli.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/JsonTimeSeriesExtractor/JsonTimeSeriesExtractor.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <File Path="test/Directory.Build.props" />
+    <Project Path="test/JsonTimeSeriesExtractor.Benchmarks/JsonTimeSeriesExtractor.Benchmarks.csproj" />
+    <Project Path="test/JsonTimeSeriesExtractor.Tests/JsonTimeSeriesExtractor.Tests.csproj" />
+  </Folder>
+</Solution>
