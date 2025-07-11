@@ -141,37 +141,27 @@ namespace Jaahas.Json {
         ///   any of the <paramref name="matchRules"/>.
         /// </returns>
         private static JsonPointerMatchDelegate CreateJsonPointerMatchDelegate(IEnumerable<JsonPointerMatch> matchRules, bool allowWildcards, bool useCompiledRegularExpressions) {
-            matchRules = matchRules.ToArray(); // We don't want to enumerate this multiple times.
+            // Optimised predicate construction: process each rule only once and avoid redundant predicates.
+            var matchRuleArray = matchRules as JsonPointerMatch[] ?? matchRules.ToArray();
+            var nonWildcardPointers = new List<JsonPointer>();
+            var wildcardPredicates = new List<JsonPointerMatchDelegate>();
 
-            if (!allowWildcards) {
-                // No wildcards.
-                return (context, pointer, element) => matchRules.Any(x => MatchExactOrPartialJsonPointer(context, x.Pointer, pointer, element));
-            }
-
-            if (matchRules.All(x => !x.IsWildcardMatchRule)) {
-                // No wildcards.
-                return (context, pointer, element) => matchRules.Any(x => MatchExactOrPartialJsonPointer(context, x.Pointer, pointer, element));
-            }
-
-            // Wildcards are present: return a more complex predicate that checks for wildcard matches.
-            var predicates = new List<JsonPointerMatchDelegate>();
-
-            foreach (var matchRule in matchRules) {
+            foreach (var matchRule in matchRuleArray) {
+                // Ignore rules with no pointer and no raw value.
                 if (matchRule.Pointer == null && string.IsNullOrWhiteSpace(matchRule.RawValue)) {
                     continue;
                 }
 
-                if (!matchRule.IsWildcardMatchRule) {
-                    // No wildcards in current match rule.
-                    predicates.Add((context, pointer, element) => matchRules.Any(x => MatchExactOrPartialJsonPointer(context, x.Pointer, pointer, element)));
+                // Non-wildcard rules: collect for fast lookup.
+                if (!allowWildcards || !matchRule.IsWildcardMatchRule) {
+                    // These are exact or partial pointer matches, handled together for efficiency.
+                    nonWildcardPointers.Add(matchRule.Pointer!);
                     continue;
                 }
 
-                // Match rule contains wildcards: add a predicate that checks for wildcard matches.
-
+                // Pattern wildcard rules: compile regex once per rule.
                 if (matchRule.IsPatternWildcardMatchRule) {
-                    // Use pattern match wildcards.
-
+                    // Convert wildcard pattern to regex. '*' matches any sequence, '?' matches any single character.
 #if NETCOREAPP
                     var pattern = Regex.Escape(matchRule.RawValue!)
                         .Replace(@"\*", ".*", StringComparison.Ordinal)
@@ -181,21 +171,18 @@ namespace Jaahas.Json {
                         .Replace(@"\*", ".*")
                         .Replace(@"\?", ".");
 #endif
-
                     var regex = new Regex(
-                        $"^{pattern}$", 
+                        $"^{pattern}$",
                         useCompiledRegularExpressions
                             ? RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled
-                            : RegexOptions.IgnoreCase | RegexOptions.Singleline, 
+                            : RegexOptions.IgnoreCase | RegexOptions.Singleline,
                         TimeSpan.FromSeconds(1));
-
-                    predicates.Add((context, pointer, element) => {
-                        // If the JSON element is an object or an array and we are running in
-                        // recursive mode we will always return true if we have not reached our
-                        // maximum recursion depth. This is required because we perform a regex
-                        // match against the entire pointer string instead of doing a
-                        // segment-by-segment match like we do with MQTT-style expressions so we
-                        // don't want to accidentally prune non-matching pointers too early.
+                    wildcardPredicates.Add((context, pointer, element) => {
+                        // If the JSON element is an object or an array and we are running in recursive mode,
+                        // always return true if we have not reached our maximum recursion depth. This is required
+                        // because we perform a regex match against the entire pointer string instead of doing a
+                        // segment-by-segment match like we do with MQTT-style expressions so we don't want to
+                        // accidentally prune non-matching pointers too early.
                         if (context.Options.Recursive && (context.ElementStack.Count < context.MaxDepth) && (element.ValueKind == JsonValueKind.Object || element.ValueKind == JsonValueKind.Array)) {
                             return true;
                         }
@@ -204,83 +191,87 @@ namespace Jaahas.Json {
                     continue;
                 }
 
-                // Not a pattern match expression i.e. one or more of the match rule's pointer
-                // segments are MQTT-style wildcards. For each pointer segment, we'll check if
-                // that segment is a single-level or multi-level wildcard.
+                // MQTT-style wildcard match: build segment matcher once per rule.
+                // For each pointer segment, check if that segment is a single-level or multi-level wildcard.
+                // Multi-level wildcards are only valid in the final segment (index 0 in reversed segment list).
                 var matchSegments = matchRule.Pointer!.Reverse().Select((x, i) => new {
                     Segment = x,
                     IsSingleLevelWildcard = x.Equals(SingleLevelMqttWildcard, StringComparison.Ordinal),
-                    // Multi-level wildcard is only valid in the final segment, which is at index
-                    // 0 in our reversed segment list.
                     IsMultiLevelWildcard = i == 0 && x.Equals(MultiLevelMqttWildcard, StringComparison.Ordinal)
                 }).Reverse().ToArray();
-
-                predicates.Add((context, pointer, element) => {
+                wildcardPredicates.Add((context, pointer, element) => {
+                    // Special handling for when the element pointer has fewer segments than the match pointer.
                     if (pointer.Count < matchSegments.Length) {
-                        // Special handling for when the element pointer has fewer segments than
-                        // the match pointer.
-
+                        // We're not running in recursive mode so definitely no match.
                         if (!context.Options.Recursive) {
-                            // We're not running in recursive mode so definitely no match.
                             return false;
                         }
+                        // The element is not an object or an array so definitely no match.
                         if (element.ValueKind != JsonValueKind.Object && element.ValueKind != JsonValueKind.Array) {
-                            // The element is not an object or an array so definitely no match.
                             return false;
                         }
+                        // We have reached our maximum recursion depth so definitely no match.
+                        // We use > in the comparison above instead of >= because the element stack will always contain the root element.
                         if (context.Options.MaxDepth >= 1 && context.ElementStack.Count > context.Options.MaxDepth) {
-                            // We have reached our maximum recursion depth so definitely no match.
-                            // We use > in the comparison above instead of >= because the element
-                            // stack will always contain the root element.
                             return false;
                         }
                     }
-
                     var elementPointerIsLongerThanMatchPointer = pointer.Count > matchSegments.Length;
-
+                    // The pointer has more segments than the match pattern; definitely no match unless the last match segment is a multi-level wildcard.
                     if (elementPointerIsLongerThanMatchPointer) {
-                        // The pointer has more segments than the match pattern; definitely no
-                        // match unless the last match segment is a multi-level wildcard.
                         if (!matchSegments[^1].IsMultiLevelWildcard) {
                             return false;
                         }
                     }
-
-                    // The predicate is invoked on each iteration of the document traversal.
-                    // Therefore, we only ever need to test the final segment of the element
-                    // pointer, as we will have already tested the previous segments in
-                    // previous iterations.
-
+                    // Only ever need to test the final segment of the element pointer, as previous segments were tested in previous iterations.
                     var pointerSegmentIndex = pointer.Count - 1;
-                    var pointerSegment = pointer[pointerSegmentIndex];
                     var matchSegment = pointerSegmentIndex >= matchSegments.Length
                         ? matchSegments[^1]
                         : matchSegments[pointerSegmentIndex];
-
                     if (matchSegment.IsSingleLevelWildcard) {
-                        // Single-level wildcard: match the current segment unless the element
-                        // pointer has more segments than the match pointer and we have advanced
-                        // beyond the end of the match pointer.
+                        // Single-level wildcard: match the current segment unless the element pointer has more segments than the match pointer and we have advanced beyond the end of the match pointer.
                         if (elementPointerIsLongerThanMatchPointer && pointerSegmentIndex >= matchSegments.Length) {
                             return false;
                         }
-
                         return true;
                     }
-
                     if (matchSegment.IsMultiLevelWildcard) {
                         // Multi-level wildcard: always match the current segment.
                         return true;
                     }
-
                     // Not a wildcard; check if the segment values match.
-                    return pointerSegment.Equals(matchSegment.Segment);
+                    return pointer[pointerSegmentIndex].Equals(matchSegment.Segment);
                 });
             }
 
-            return predicates.Count == 0 
-                ? (_, _, _) => true
-                : (context, pointer, element) => predicates.Any(x => x.Invoke(context, pointer, element));
+            // Use HashSet for fast exact pointer lookup if there are many non-wildcard rules.
+            HashSet<JsonPointer>? nonWildcardPointerSet = null;
+            if (nonWildcardPointers.Count > 8) {
+                nonWildcardPointerSet = new HashSet<JsonPointer>(nonWildcardPointers);
+            }
+
+            return (context, pointer, element) => {
+                // First, check non-wildcard rules (exact or partial match).
+                if (nonWildcardPointerSet != null) {
+                    if (nonWildcardPointerSet.Contains(pointer)) {
+                        return true;
+                    }
+                } else if (nonWildcardPointers.Count > 0) {
+                    // For partial matches, check each pointer in the list.
+                    foreach (var p in nonWildcardPointers) {
+                        if (MatchExactOrPartialJsonPointer(context, p, pointer, element)) {
+                            return true;
+                        }
+                    }
+                }
+                // Then, check wildcard/pattern rules.
+                foreach (var pred in wildcardPredicates) {
+                    if (pred(context, pointer, element)) {
+                        return true;
+                    }
+                }
+                return false;
+            };
         }
 
 
