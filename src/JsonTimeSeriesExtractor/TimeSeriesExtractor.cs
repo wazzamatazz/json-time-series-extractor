@@ -194,11 +194,18 @@ namespace Jaahas.Json {
                 // MQTT-style wildcard match: build segment matcher once per rule.
                 // For each pointer segment, check if that segment is a single-level or multi-level wildcard.
                 // Multi-level wildcards are only valid in the final segment (index 0 in reversed segment list).
-                var matchSegments = matchRule.Pointer!.Reverse().Select((x, i) => new {
-                    Segment = x,
-                    IsSingleLevelWildcard = x.Equals(SingleLevelMqttWildcard, StringComparison.Ordinal),
-                    IsMultiLevelWildcard = i == 0 && x.Equals(MultiLevelMqttWildcard, StringComparison.Ordinal)
-                }).Reverse().ToArray();
+                // Avoid double Reverse and ToArray allocations by using a for-loop and Span for small arrays.
+                var pointerSegments = matchRule.Pointer!;
+                var matchSegments = new (string Segment, bool IsSingleLevelWildcard, bool IsMultiLevelWildcard)[pointerSegments.Count];
+                for (var i = 0; i < pointerSegments.Count; i++) {
+                    var segment = pointerSegments[i];
+                    matchSegments[i] = (
+                        Segment: segment,
+                        IsSingleLevelWildcard: segment.Equals(SingleLevelMqttWildcard, StringComparison.Ordinal),
+                        IsMultiLevelWildcard: i == pointerSegments.Count - 1 && segment.Equals(MultiLevelMqttWildcard, StringComparison.Ordinal)
+                    );
+                }
+                
                 wildcardPredicates.Add((context, pointer, element) => {
                     // Special handling for when the element pointer has fewer segments than the match pointer.
                     if (pointer.Count < matchSegments.Length) {
@@ -228,17 +235,20 @@ namespace Jaahas.Json {
                     var matchSegment = pointerSegmentIndex >= matchSegments.Length
                         ? matchSegments[^1]
                         : matchSegments[pointerSegmentIndex];
+                    
+                    // Single-level wildcard: match the current segment unless the element pointer has more segments than the match pointer and we have advanced beyond the end of the match pointer.
                     if (matchSegment.IsSingleLevelWildcard) {
-                        // Single-level wildcard: match the current segment unless the element pointer has more segments than the match pointer and we have advanced beyond the end of the match pointer.
                         if (elementPointerIsLongerThanMatchPointer && pointerSegmentIndex >= matchSegments.Length) {
                             return false;
                         }
                         return true;
                     }
+                    
+                    // Multi-level wildcard: always match the current segment.
                     if (matchSegment.IsMultiLevelWildcard) {
-                        // Multi-level wildcard: always match the current segment.
                         return true;
                     }
+                    
                     // Not a wildcard; check if the segment values match.
                     return pointer[pointerSegmentIndex].Equals(matchSegment.Segment);
                 });
