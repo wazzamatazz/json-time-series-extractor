@@ -825,6 +825,7 @@ namespace Jaahas.Json.Tests {
             var now = DateTimeOffset.UtcNow;
 
             var deviceSample = new { 
+                time = now,
                 data = new[] {
                     new {
                         time = now.AddHours(-2),
@@ -851,7 +852,7 @@ namespace Jaahas.Json.Tests {
             Assert.AreEqual(deviceSample.data[1].time, samples[1].Timestamp);
             Assert.AreEqual(deviceSample.data[1].temperature, samples[1].Value);
         }
-
+        
 
         [TestMethod]
         public void ShouldNotAllowNestedTimestampsInRecursiveMode() {

@@ -5,15 +5,15 @@
     <NoWarn>NU1507;$(NoWarn)</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="BenchmarkDotNet" Version="0.14.0" />
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.2" />
     <PackageVersion Include="JsonPointer.Net" Version="5.3.1" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="9.0.2" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="9.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.7" />
     <PackageVersion Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
-    <PackageVersion Include="MSTest" Version="3.8.2" />
+    <PackageVersion Include="MSTest" Version="3.9.3" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="System.ComponentModel.Annotations" Version="5.0.0" />
-    <PackageVersion Include="System.Text.Json" Version="9.0.2" />
+    <PackageVersion Include="System.Text.Json" Version="9.0.7" />
   </ItemGroup>
 </Project>
