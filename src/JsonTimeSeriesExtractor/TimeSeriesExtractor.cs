@@ -97,11 +97,11 @@ namespace Jaahas.Json {
             JsonPointerMatchDelegate? excludePredicate = null;
 
             if (options.PointersToInclude != null) {
-                includePredicate = CreateJsonPointerMatchDelegate(options.PointersToInclude, options.AllowWildcardExpressions, options.UseCompiledRegularExpressions);
+                includePredicate = CreateJsonPointerMatchDelegateCore(options.PointersToInclude, options.AllowWildcardExpressions, options.UseCompiledRegularExpressions);
             }
 
             if (options.PointersToExclude != null) {
-                excludePredicate = CreateJsonPointerMatchDelegate(options.PointersToExclude, options.AllowWildcardExpressions, options.UseCompiledRegularExpressions);
+                excludePredicate = CreateJsonPointerMatchDelegateCore(options.PointersToExclude, options.AllowWildcardExpressions, options.UseCompiledRegularExpressions);
             }
 
             if (includePredicate == null && excludePredicate == null) {
@@ -136,7 +136,7 @@ namespace Jaahas.Json {
         ///   A predicate that returns <see langword="true"/> if the specified JSON pointer matches 
         ///   any of the <paramref name="matchRules"/>.
         /// </returns>
-        private static JsonPointerMatchDelegate CreateJsonPointerMatchDelegate(IEnumerable<JsonPointerMatch> matchRules, bool allowWildcards, bool useCompiledRegularExpressions) {
+        private static JsonPointerMatchDelegate CreateJsonPointerMatchDelegateCore(IEnumerable<JsonPointerMatch> matchRules, bool allowWildcards, bool useCompiledRegularExpressions) {
             // Optimised predicate construction: process each rule only once and avoid redundant predicates.
             var matchRuleArray = matchRules as JsonPointerMatch[] ?? matchRules.ToArray();
             var nonWildcardPointers = new List<JsonPointer>();
