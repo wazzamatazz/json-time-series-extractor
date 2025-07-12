@@ -15,13 +15,6 @@
     <PackageReference Include="System.Text.Json" />
     <PackageReference Include="JsonPointer.Net" />
   </ItemGroup>
-
-  <ItemGroup Condition=" '$(TargetFramework)' == 'netstandard2.0' ">
-    <PackageReference Include="PolySharp">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-  </ItemGroup>
   
   <ItemGroup>
     <Compile Update="Resources.Designer.cs">

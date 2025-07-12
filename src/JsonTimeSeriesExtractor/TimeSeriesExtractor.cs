@@ -222,14 +222,22 @@ namespace Jaahas.Json {
                     var elementPointerIsLongerThanMatchPointer = pointer.Count > matchSegments.Length;
                     // The pointer has more segments than the match pattern; definitely no match unless the last match segment is a multi-level wildcard.
                     if (elementPointerIsLongerThanMatchPointer) {
+#if NETCOREAPP
                         if (!matchSegments[^1].IsMultiLevelWildcard) {
+#else
+                        if (!matchSegments[matchSegments.Length - 1].IsMultiLevelWildcard) {    
+#endif
                             return false;
                         }
                     }
                     // Only ever need to test the final segment of the element pointer, as previous segments were tested in previous iterations.
                     var pointerSegmentIndex = pointer.Count - 1;
                     var matchSegment = pointerSegmentIndex >= matchSegments.Length
+#if NETCOREAPP
                         ? matchSegments[^1]
+#else
+                        ? matchSegments[matchSegments.Length - 1]                        
+#endif
                         : matchSegments[pointerSegmentIndex];
                     
                     // Single-level wildcard: match the current segment unless the element pointer has more segments than the match pointer and we have advanced beyond the end of the match pointer.
@@ -816,7 +824,11 @@ namespace Jaahas.Json {
                 if (!options.Recursive || forceLocalName) {
                     return pointer.Count == 0
                         ? string.Empty
+#if NETCOREAPP
                         : pointer[^1];
+#else
+                        : pointer[pointer.Count - 1];
+#endif
                 }
 
                 if (options.IncludeArrayIndexesInSampleKeys || !GetElementStackInHierarchyOrder().Any(x => x.IsArrayItem)) {
