@@ -113,11 +113,7 @@ namespace Jaahas.Json {
                     return false;
                 }
 
-                if (includePredicate != null) {
-                    return includePredicate.Invoke(context, pointer, element);
-                }
-
-                return true;
+                return includePredicate == null || includePredicate.Invoke(context, pointer, element);
             };
         }
 
