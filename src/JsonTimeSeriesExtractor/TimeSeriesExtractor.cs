@@ -15,7 +15,7 @@ namespace Jaahas.Json {
     /// Utility class for extracting key-timestamp-value time series data from JSON objects.
     /// </summary>
     /// <seealso cref="TimeSeriesExtractorOptions"/>
-    public sealed partial class TimeSeriesExtractor {
+    public static partial class TimeSeriesExtractor {
 
 #if NET8_0_OR_GREATER
         /// <summary>
@@ -97,11 +97,11 @@ namespace Jaahas.Json {
             JsonPointerMatchDelegate? excludePredicate = null;
 
             if (options.PointersToInclude != null) {
-                includePredicate = CreateJsonPointerMatchDelegate(options.PointersToInclude, options.AllowWildcardExpressions, options.UseCompiledRegularExpressions);
+                includePredicate = CreateJsonPointerMatchDelegateCore(options.PointersToInclude, options.AllowWildcardExpressions, options.UseCompiledRegularExpressions);
             }
 
             if (options.PointersToExclude != null) {
-                excludePredicate = CreateJsonPointerMatchDelegate(options.PointersToExclude, options.AllowWildcardExpressions, options.UseCompiledRegularExpressions);
+                excludePredicate = CreateJsonPointerMatchDelegateCore(options.PointersToExclude, options.AllowWildcardExpressions, options.UseCompiledRegularExpressions);
             }
 
             if (includePredicate == null && excludePredicate == null) {
@@ -113,11 +113,7 @@ namespace Jaahas.Json {
                     return false;
                 }
 
-                if (includePredicate != null) {
-                    return includePredicate.Invoke(context, pointer, element);
-                }
-
-                return true;
+                return includePredicate == null || includePredicate.Invoke(context, pointer, element);
             };
         }
 
@@ -132,42 +128,36 @@ namespace Jaahas.Json {
         ///   Specifies if pattern match or MQTT-style match expressions are allowed in the 
         ///   <paramref name="matchRules"/>.
         /// </param>
+        /// <param name="useCompiledRegularExpressions">
+        ///   When <see langword="true"/>, regular expressions generated from pattern match expressions
+        ///   in <paramref name="matchRules"/> will be created using <see cref="RegexOptions.Compiled"/>
+        /// </param>
         /// <returns>
         ///   A predicate that returns <see langword="true"/> if the specified JSON pointer matches 
         ///   any of the <paramref name="matchRules"/>.
         /// </returns>
-        private static JsonPointerMatchDelegate CreateJsonPointerMatchDelegate(IEnumerable<JsonPointerMatch> matchRules, bool allowWildcards, bool useCompiledRegularExpressions) {
-            matchRules = matchRules.ToArray(); // We don't want to enumerate this multiple times.
+        private static JsonPointerMatchDelegate CreateJsonPointerMatchDelegateCore(IEnumerable<JsonPointerMatch> matchRules, bool allowWildcards, bool useCompiledRegularExpressions) {
+            // Optimised predicate construction: process each rule only once and avoid redundant predicates.
+            var matchRuleArray = matchRules as JsonPointerMatch[] ?? matchRules.ToArray();
+            var nonWildcardPointers = new List<JsonPointer>();
+            var wildcardPredicates = new List<JsonPointerMatchDelegate>();
 
-            if (!allowWildcards) {
-                // No wildcards.
-                return (context, pointer, element) => matchRules.Any(x => MatchExactOrPartialJsonPointer(context, x.Pointer, pointer, element));
-            }
-
-            if (matchRules.All(x => !x.IsWildcardMatchRule)) {
-                // No wildcards.
-                return (context, pointer, element) => matchRules.Any(x => MatchExactOrPartialJsonPointer(context, x.Pointer, pointer, element));
-            }
-
-            // Wildcards are present: return a more complex predicate that checks for wildcard matches.
-            var predicates = new List<JsonPointerMatchDelegate>();
-
-            foreach (var matchRule in matchRules) {
+            foreach (var matchRule in matchRuleArray) {
+                // Ignore rules with no pointer and no raw value.
                 if (matchRule.Pointer == null && string.IsNullOrWhiteSpace(matchRule.RawValue)) {
                     continue;
                 }
 
-                if (!matchRule.IsWildcardMatchRule) {
-                    // No wildcards in current match rule.
-                    predicates.Add((context, pointer, element) => matchRules.Any(x => MatchExactOrPartialJsonPointer(context, x.Pointer, pointer, element)));
+                // Non-wildcard rules: collect for fast lookup.
+                if (!allowWildcards || !matchRule.IsWildcardMatchRule) {
+                    // These are exact or partial pointer matches, handled together for efficiency.
+                    nonWildcardPointers.Add(matchRule.Pointer!);
                     continue;
                 }
 
-                // Match rule contains wildcards: add a predicate that checks for wildcard matches.
-
+                // Pattern wildcard rules: compile regex once per rule.
                 if (matchRule.IsPatternWildcardMatchRule) {
-                    // Use pattern match wildcards.
-
+                    // Convert wildcard pattern to regex. '*' matches any sequence, '?' matches any single character.
 #if NETCOREAPP
                     var pattern = Regex.Escape(matchRule.RawValue!)
                         .Replace(@"\*", ".*", StringComparison.Ordinal)
@@ -177,21 +167,18 @@ namespace Jaahas.Json {
                         .Replace(@"\*", ".*")
                         .Replace(@"\?", ".");
 #endif
-
                     var regex = new Regex(
-                        $"^{pattern}$", 
+                        $"^{pattern}$",
                         useCompiledRegularExpressions
                             ? RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled
-                            : RegexOptions.IgnoreCase | RegexOptions.Singleline, 
+                            : RegexOptions.IgnoreCase | RegexOptions.Singleline,
                         TimeSpan.FromSeconds(1));
-
-                    predicates.Add((context, pointer, element) => {
-                        // If the JSON element is an object or an array and we are running in
-                        // recursive mode we will always return true if we have not reached our
-                        // maximum recursion depth. This is required because we perform a regex
-                        // match against the entire pointer string instead of doing a
-                        // segment-by-segment match like we do with MQTT-style expressions so we
-                        // don't want to accidentally prune non-matching pointers too early.
+                    wildcardPredicates.Add((context, pointer, element) => {
+                        // If the JSON element is an object or an array and we are running in recursive mode,
+                        // always return true if we have not reached our maximum recursion depth. This is required
+                        // because we perform a regex match against the entire pointer string instead of doing a
+                        // segment-by-segment match like we do with MQTT-style expressions so we don't want to
+                        // accidentally prune non-matching pointers too early.
                         if (context.Options.Recursive && (context.ElementStack.Count < context.MaxDepth) && (element.ValueKind == JsonValueKind.Object || element.ValueKind == JsonValueKind.Array)) {
                             return true;
                         }
@@ -200,83 +187,105 @@ namespace Jaahas.Json {
                     continue;
                 }
 
-                // Not a pattern match expression i.e. one or more of the match rule's pointer
-                // segments are MQTT-style wildcards. For each pointer segment, we'll check if
-                // that segment is a single-level or multi-level wildcard.
-                var matchSegments = matchRule.Pointer!.Reverse().Select((x, i) => new {
-                    Segment = x,
-                    IsSingleLevelWildcard = x.Equals(SingleLevelMqttWildcard, StringComparison.Ordinal),
-                    // Multi-level wildcard is only valid in the final segment, which is at index
-                    // 0 in our reversed segment list.
-                    IsMultiLevelWildcard = i == 0 && x.Equals(MultiLevelMqttWildcard, StringComparison.Ordinal)
-                }).Reverse().ToArray();
-
-                predicates.Add((context, pointer, element) => {
+                // MQTT-style wildcard match: build segment matcher once per rule.
+                // For each pointer segment, check if that segment is a single-level or multi-level wildcard.
+                // Multi-level wildcards are only valid in the final segment (index 0 in reversed segment list).
+                // Avoid double Reverse and ToArray allocations by using a for-loop and Span for small arrays.
+                var pointerSegments = matchRule.Pointer!;
+                var matchSegments = new (string Segment, bool IsSingleLevelWildcard, bool IsMultiLevelWildcard)[pointerSegments.Count];
+                for (var i = 0; i < pointerSegments.Count; i++) {
+                    var segment = pointerSegments[i];
+                    matchSegments[i] = (
+                        Segment: segment,
+                        IsSingleLevelWildcard: segment.Equals(SingleLevelMqttWildcard, StringComparison.Ordinal),
+                        IsMultiLevelWildcard: i == pointerSegments.Count - 1 && segment.Equals(MultiLevelMqttWildcard, StringComparison.Ordinal)
+                    );
+                }
+                
+                wildcardPredicates.Add((context, pointer, element) => {
+                    // Special handling for when the element pointer has fewer segments than the match pointer.
                     if (pointer.Count < matchSegments.Length) {
-                        // Special handling for when the element pointer has fewer segments than
-                        // the match pointer.
-
+                        // We're not running in recursive mode so definitely no match.
                         if (!context.Options.Recursive) {
-                            // We're not running in recursive mode so definitely no match.
                             return false;
                         }
+                        // The element is not an object or an array so definitely no match.
                         if (element.ValueKind != JsonValueKind.Object && element.ValueKind != JsonValueKind.Array) {
-                            // The element is not an object or an array so definitely no match.
                             return false;
                         }
+                        // We have reached our maximum recursion depth so definitely no match.
+                        // We use > in the comparison above instead of >= because the element stack will always contain the root element.
                         if (context.Options.MaxDepth >= 1 && context.ElementStack.Count > context.Options.MaxDepth) {
-                            // We have reached our maximum recursion depth so definitely no match.
-                            // We use > in the comparison above instead of >= because the element
-                            // stack will always contain the root element.
                             return false;
                         }
                     }
-
                     var elementPointerIsLongerThanMatchPointer = pointer.Count > matchSegments.Length;
-
+                    // The pointer has more segments than the match pattern; definitely no match unless the last match segment is a multi-level wildcard.
                     if (elementPointerIsLongerThanMatchPointer) {
-                        // The pointer has more segments than the match pattern; definitely no
-                        // match unless the last match segment is a multi-level wildcard.
-                        if (!matchSegments[matchSegments.Length - 1].IsMultiLevelWildcard) {
+#if NETCOREAPP
+                        if (!matchSegments[^1].IsMultiLevelWildcard) {
+#else
+                        if (!matchSegments[matchSegments.Length - 1].IsMultiLevelWildcard) {    
+#endif
                             return false;
                         }
                     }
-
-                    // The predicate is invoked on each iteration of the document traversal.
-                    // Therefore, we only ever need to test the final segment of the element
-                    // pointer, as we will have already tested the previous segments in
-                    // previous iterations.
-
+                    // Only ever need to test the final segment of the element pointer, as previous segments were tested in previous iterations.
                     var pointerSegmentIndex = pointer.Count - 1;
-                    var pointerSegment = pointer[pointerSegmentIndex];
                     var matchSegment = pointerSegmentIndex >= matchSegments.Length
-                        ? matchSegments[matchSegments.Length - 1]
+#if NETCOREAPP
+                        ? matchSegments[^1]
+#else
+                        ? matchSegments[matchSegments.Length - 1]                        
+#endif
                         : matchSegments[pointerSegmentIndex];
-
+                    
+                    // Single-level wildcard: match the current segment unless the element pointer has more segments than the match pointer and we have advanced beyond the end of the match pointer.
                     if (matchSegment.IsSingleLevelWildcard) {
-                        // Single-level wildcard: match the current segment unless the element
-                        // pointer has more segments than the match pointer and we have advanced
-                        // beyond the end of the match pointer.
                         if (elementPointerIsLongerThanMatchPointer && pointerSegmentIndex >= matchSegments.Length) {
                             return false;
                         }
-
                         return true;
                     }
-
+                    
+                    // Multi-level wildcard: always match the current segment.
                     if (matchSegment.IsMultiLevelWildcard) {
-                        // Multi-level wildcard: always match the current segment.
                         return true;
                     }
-
+                    
                     // Not a wildcard; check if the segment values match.
-                    return pointerSegment.Equals(matchSegment.Segment);
+                    return pointer[pointerSegmentIndex].Equals(matchSegment.Segment);
                 });
             }
 
-            return predicates.Count == 0 
-                ? (_, _, _) => true
-                : (context, pointer, element) => predicates.Any(x => x.Invoke(context, pointer, element));
+            // Use HashSet for fast exact pointer lookup if there are many non-wildcard rules.
+            HashSet<JsonPointer>? nonWildcardPointerSet = null;
+            if (nonWildcardPointers.Count > 8) {
+                nonWildcardPointerSet = new HashSet<JsonPointer>(nonWildcardPointers);
+            }
+
+            return (context, pointer, element) => {
+                // First, check non-wildcard rules (exact or partial match).
+                if (nonWildcardPointerSet != null) {
+                    if (nonWildcardPointerSet.Contains(pointer)) {
+                        return true;
+                    }
+                } else if (nonWildcardPointers.Count > 0) {
+                    // For partial matches, check each pointer in the list.
+                    foreach (var p in nonWildcardPointers) {
+                        if (MatchExactOrPartialJsonPointer(context, p, pointer, element)) {
+                            return true;
+                        }
+                    }
+                }
+                // Then, check wildcard/pattern rules.
+                foreach (var pred in wildcardPredicates) {
+                    if (pred(context, pointer, element)) {
+                        return true;
+                    }
+                }
+                return false;
+            };
         }
 
 
@@ -447,12 +456,9 @@ namespace Jaahas.Json {
 
             if (!TryGetTimestamp(element, context.Options.TimestampProperty, context.Options, out var sampleTime)) {
                 var ts = options.GetDefaultTimestamp?.Invoke();
-                if (ts == null) {
-                    defaultTimestamp = new ParsedTimestamp(DateTimeOffset.UtcNow, TimestampSource.CurrentTime, null);
-                }
-                else {
-                    defaultTimestamp = new ParsedTimestamp(ts.Value, TimestampSource.FallbackProvider, null);
-                }
+                defaultTimestamp = ts == null 
+                    ? new ParsedTimestamp(DateTimeOffset.UtcNow, TimestampSource.CurrentTime, null) 
+                    : new ParsedTimestamp(ts.Value, TimestampSource.FallbackProvider, null);
             }
             else {
                 defaultTimestamp = new ParsedTimestamp(sampleTime, TimestampSource.Document, context.Options.TimestampProperty);
@@ -502,86 +508,108 @@ namespace Jaahas.Json {
             }
 
             if (!context.Options.Recursive || currentRecursionDepth >= context.MaxDepth) {
-                // We are not using recursive mode, or we have exceeded the maximum recursion
-                // depth; build a sample with the current element. When we have exceeded the
-                // maximum recursion depth, the value will be the serialized JSON of the element
-                // if the element is an object or an array.
-                var sample = BuildSample(pointer, currentElement.Element);
+                var sample = BuildSample(context, pointer, currentElement.Element);
                 if (!sample.HasValue) {
                     yield break;
                 }
-
                 yield return sample.Value;
             }
             else {
-                // We are doing recursive processing and have not exceeded the maximum recursion
-                // depth, so continue as normal.
-
                 switch (currentElement.Element.ValueKind) {
                     case JsonValueKind.Object:
-                        var popTimestamp = false;
-                        if (context.Options.AllowNestedTimestamps && context.Options.TimestampProperty != null && TryGetTimestamp(currentElement.Element, context.Options.TimestampProperty, context.Options, out var sampleTime)) {
-                            context.TimestampStack.Push(new ParsedTimestamp(sampleTime, TimestampSource.Document, pointer.Combine(context.Options.TimestampProperty!)));
-                            popTimestamp = true;
-                        }
-
-                        foreach (var item in currentElement.Element.EnumerateObject()) {
-                            context.ElementStack.Push(new ElementStackEntry(item.Name, item.Value, false));
-
-                            foreach (var val in GetSamplesCore(context, currentRecursionDepth + 1, pointer.Combine(item.Name))) {
-                                yield return val;
-                            }
-
-                            context.ElementStack.Pop();
-                        }
-
-                        if (popTimestamp) {
-                            context.TimestampStack.Pop();
+                        foreach (var val in ProcessObjectElement(context, currentRecursionDepth, pointer, currentElement.Element)) {
+                            yield return val;
                         }
                         break;
                     case JsonValueKind.Array:
-                        var index = -1;
-
-                        foreach (var item in currentElement.Element.EnumerateArray()) {
-                            ++index;
-
-                            context.ElementStack.Push(new ElementStackEntry(index.ToString(CultureInfo.InvariantCulture), item, true));
-
-                            foreach (var val in GetSamplesCore(context, currentRecursionDepth + 1, pointer.Combine(index))) {
-                                yield return val;
-                            }
-
-                            context.ElementStack.Pop();
+                        foreach (var val in ProcessArrayElement(context, currentRecursionDepth, pointer, currentElement.Element)) {
+                            yield return val;
                         }
                         break;
                     default:
                         if (context.ElementStack.Count == 0) {
                             yield break;
                         }
-
-                        var sample = BuildSample(pointer, currentElement.Element);
+                        var sample = BuildSample(context, pointer, currentElement.Element);
                         if (sample.HasValue) {
                             yield return sample.Value;
                         }
                         break;
                 }
             }
+        }
 
-            
-            TimeSeriesSample? BuildSample(JsonPointer ptr, JsonElement element) {
-                // Check if this element should be included.
-                if (!context.CanProcessElement(ptr, element)) {
-                    return null;
+        /// <summary>
+        /// Processes a JSON object element during sample extraction.
+        /// </summary>
+        private static IEnumerable<TimeSeriesSample> ProcessObjectElement(
+            TimeSeriesExtractorContext context,
+            int currentRecursionDepth,
+            JsonPointer pointer,
+            JsonElement element
+        ) {
+            // If nested timestamps are allowed and the current object contains a timestamp property,
+            // push the new timestamp onto the stack for use by child elements.
+            var popTimestamp = false;
+            if (context.Options is { AllowNestedTimestamps: true, TimestampProperty: not null } && TryGetTimestamp(element, context.Options.TimestampProperty, context.Options, out var sampleTime)) {
+                context.TimestampStack.Push(new ParsedTimestamp(sampleTime, TimestampSource.Document, pointer.Combine(context.Options.TimestampProperty!)));
+                popTimestamp = true;
+            }
+            // Iterate over each property in the object and process recursively.
+            foreach (var item in element.EnumerateObject()) {
+                context.ElementStack.Push(new ElementStackEntry(item.Name, item.Value, false));
+                foreach (var val in GetSamplesCore(context, currentRecursionDepth + 1, pointer.Combine(item.Name))) {
+                    yield return val;
                 }
+                context.ElementStack.Pop();
+            }
+            // Pop the timestamp if one was pushed for this object.
+            if (popTimestamp) {
+                context.TimestampStack.Pop();
+            }
+        }
 
-                try {
-                    var key = BuildSampleKeyFromTemplate(context, ptr);
-                    var timestamp = context.TimestampStack.Peek();
-                    return BuildSampleFromJsonValue(timestamp.Timestamp, timestamp.Source, key, element);
+        /// <summary>
+        /// Processes a JSON array element during sample extraction.
+        /// </summary>
+        private static IEnumerable<TimeSeriesSample> ProcessArrayElement(
+            TimeSeriesExtractorContext context,
+            int currentRecursionDepth,
+            JsonPointer pointer,
+            JsonElement element
+        ) {
+            // Iterate over each item in the array, tracking the index for pointer construction.
+            var index = -1;
+            foreach (var item in element.EnumerateArray()) {
+                ++index;
+                // Push the array item onto the stack, marking it as an array entry.
+                context.ElementStack.Push(new ElementStackEntry(index.ToString(CultureInfo.InvariantCulture), item, true));
+                foreach (var val in GetSamplesCore(context, currentRecursionDepth + 1, pointer.Combine(index))) {
+                    yield return val;
                 }
-                catch (InvalidOperationException) {
-                    return null;
-                }
+                context.ElementStack.Pop();
+            }
+        }
+
+        /// <summary>
+        /// Builds a time series sample from the specified JSON element.
+        /// </summary>
+        private static TimeSeriesSample? BuildSample(TimeSeriesExtractorContext context, JsonPointer ptr, JsonElement element) {
+            // Only build a sample if the element passes the processing predicate.
+            if (!context.CanProcessElement(ptr, element)) {
+                return null;
+            }
+            try {
+                // Build the sample key using the template and context.
+                var key = BuildSampleKeyFromTemplate(context, ptr);
+                // Use the current timestamp from the stack.
+                var timestamp = context.TimestampStack.Peek();
+                // Construct the sample from the JSON value.
+                return BuildSampleFromJsonValue(timestamp.Timestamp, timestamp.Source, key, element);
+            }
+            catch (InvalidOperationException) {
+                // If the template cannot be resolved, skip this sample.
+                return null;
             }
         }
 
@@ -796,7 +824,11 @@ namespace Jaahas.Json {
                 if (!options.Recursive || forceLocalName) {
                     return pointer.Count == 0
                         ? string.Empty
+#if NETCOREAPP
+                        : pointer[^1];
+#else
                         : pointer[pointer.Count - 1];
+#endif
                 }
 
                 if (options.IncludeArrayIndexesInSampleKeys || !GetElementStackInHierarchyOrder().Any(x => x.IsArrayItem)) {
