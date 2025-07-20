@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Text.Json;
 
 using Json.Pointer;
@@ -64,7 +63,7 @@ namespace Jaahas.Json {
             
             // We need to add 1 to the maximum depth to allow for the root element.
             ElementStack = new ElementStack(MaxDepth + 1);
-            TimestampStack = new TimestampStack(options.Recursive && options.AllowNestedTimestamps ? MaxDepth : 1);
+            TimestampStack = new TimestampStack(options is { Recursive: true, AllowNestedTimestamps: true } ? MaxDepth : 1);
 
             // We are using the default sample key template if:
             //
