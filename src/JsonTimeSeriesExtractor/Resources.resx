@@ -125,4 +125,13 @@
     <value>Unable to find a replacement for template parameter '{0}'.</value>
     <comment>{0} - parameter name</comment>
   </data>
+  <data name="Error_StackCapacityTooSmall" xml:space="preserve">
+    <value>Capacity must be greater than zero.</value>
+  </data>
+  <data name="Error_StackIsFull" xml:space="preserve">
+    <value>The stack is full.</value>
+  </data>
+  <data name="Error_StackIsEmpty" xml:space="preserve">
+    <value>The stack is empty.</value>
+  </data>
 </root>
