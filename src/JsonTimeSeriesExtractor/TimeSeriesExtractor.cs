@@ -787,7 +787,7 @@ namespace Jaahas.Json {
                     
                     elementStackInHierarchyOrder = ArrayPool<ElementStackEntry>.Shared.Rent(context.ElementStack.Count);
                     var index = 0;
-                    foreach (var item in context.ElementStack) {
+                    foreach (var item in context.ElementStack.AsSpan()) {
                         elementStackInHierarchyOrder[index++] = item;
                     }
                 }
