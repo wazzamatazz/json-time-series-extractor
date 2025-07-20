@@ -147,7 +147,12 @@ internal sealed class TimestampStack : IDisposable {
             return;
         }
         
-        ArrayPool<ParsedTimestamp>.Shared.Return(_buffer, clearArray: true);
+        // Manually clear only the used portion to optimize performance while preventing memory leaks
+        if (_count > 0) {
+            Array.Clear(_buffer, 0, _count);
+        }
+        
+        ArrayPool<ParsedTimestamp>.Shared.Return(_buffer, clearArray: false);
         
         _disposed = true;
     }
