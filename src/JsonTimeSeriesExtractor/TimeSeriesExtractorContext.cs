@@ -102,6 +102,7 @@ namespace Jaahas.Json {
         }
 
 
+        /// <inheritdoc/>
         public void Dispose() {
             if (_disposed) {
                 return;

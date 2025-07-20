@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -688,26 +689,25 @@ namespace Jaahas.Json {
         private static string BuildSampleKeyFromTemplate(
             TimeSeriesExtractorContext context,
             JsonPointer pointer
-            
-        ) {
-            ElementStackEntry[] elementStackInHierarchyOrder = null!;
-            ElementStackEntry[] elementStackInHierarchyOrderNoArrays = null!;
-            var elementStackInHierarchyOrderNoArraysCount = 0;
-            
-            var options = context.Options;
-            
-            try {
-                if (context.IsDefaultSampleKeyTemplate) {
-                    // Fast path for default template.
-                    return GetFullPropertyName();
-                }
 
-                if (!context.SampleKeyTemplateContainsPlaceholders) {
-                    // No template replacements: this would be unusual but return the template as-is.
-                    return options.Template;
-                }
-                
-                return GetSampleKeyTemplateMatcher().Replace(options.Template, m => {
+        ) {
+            var options = context.Options;
+
+            StringBuilder? sb = null;
+
+            if (context.IsDefaultSampleKeyTemplate) {
+                // Fast path for default template.
+                return GetFullPropertyName();
+            }
+
+            if (!context.SampleKeyTemplateContainsPlaceholders) {
+                // No template replacements: this would be unusual but return the template as-is.
+                return options.Template;
+            }
+
+            return GetSampleKeyTemplateMatcher().Replace(
+                options.Template,
+                m => {
                     var pName = m.Groups["property"].Value;
 
                     if (string.Equals(pName, "$prop", StringComparison.Ordinal) || string.Equals(pName, "$prop-local", StringComparison.Ordinal)) {
@@ -722,23 +722,31 @@ namespace Jaahas.Json {
                         // Recursive mode: try and get matching replacements from every object in the
                         // stack (starting from the root) and concatenate them using the path separator.
 
-                        var hierarchy = GetElementStackInHierarchyOrder();
-                        var propVals = new List<string>(hierarchy.Count);
+                        var hierarchy = context.ElementStack.AsSpan();
+                        var propVals = ArrayPool<string>.Shared.Rent(hierarchy.Length); //new List<string>(hierarchy.Length);
+                        var propValsIndex = 0;
 
-                        foreach (var stackEntry in hierarchy) {
-                            if (stackEntry.Element.ValueKind != JsonValueKind.Object) {
-                                continue;
+                        try {
+                            foreach (var stackEntry in hierarchy) {
+                                if (stackEntry.Element.ValueKind != JsonValueKind.Object) {
+                                    continue;
+                                }
+
+                                if (!stackEntry.Element.TryGetProperty(pName, out var prop)) {
+                                    continue;
+                                }
+
+                                //propVals.Add(GetElementDisplayValue(prop));
+                                propVals[propValsIndex++] = GetElementDisplayValue(prop);
                             }
 
-                            if (!stackEntry.Element.TryGetProperty(pName, out var prop)) {
-                                continue;
+                            //if (propVals.Count > 0) {
+                            if (propValsIndex > 0) {
+                                return string.Join(options.PathSeparator, new ArraySegment<string?>(propVals, 0, propValsIndex));
                             }
-
-                            propVals.Add(GetElementDisplayValue(prop));
                         }
-
-                        if (propVals.Count > 0) {
-                            return string.Join(options.PathSeparator, propVals);
+                        finally {
+                            ArrayPool<string>.Shared.Return(propVals);
                         }
                     }
                     else {
@@ -761,63 +769,10 @@ namespace Jaahas.Json {
                     // text.
                     return replacement ?? m.Value;
                 });
-            }
-            finally {
-                if (elementStackInHierarchyOrder != null) {
-                    ArrayPool<ElementStackEntry>.Shared.Return(elementStackInHierarchyOrder);
-                }
-                if (elementStackInHierarchyOrderNoArrays != null) {
-                    ArrayPool<ElementStackEntry>.Shared.Return(elementStackInHierarchyOrderNoArrays);
-                }
-            }
-            
-            static string GetElementDisplayValue(JsonElement el) => el.ValueKind == JsonValueKind.String 
-                ? el.GetString()! 
-                : el.GetRawText();
-            
-            ArraySegment<ElementStackEntry> GetElementStackInHierarchyOrder() {
-                if (elementStackInHierarchyOrder == null) {
-                    if (!options.Recursive || context.ElementStack.Count == 0) {
-#if NETCOREAPP
-                        return ArraySegment<ElementStackEntry>.Empty;
-#else
-                        return default;
-#endif
-                    }
-                    
-                    elementStackInHierarchyOrder = ArrayPool<ElementStackEntry>.Shared.Rent(context.ElementStack.Count);
-                    var index = 0;
-                    foreach (var item in context.ElementStack.AsSpan()) {
-                        elementStackInHierarchyOrder[index++] = item;
-                    }
-                }
-                
-                return new ArraySegment<ElementStackEntry>(elementStackInHierarchyOrder, 0, context.ElementStack.Count);
-            }
 
-            ArraySegment<ElementStackEntry> GetElementStackInHierarchyOrderNoArrays() {
-                if (elementStackInHierarchyOrderNoArrays == null) {
-                    if (!options.Recursive || context.ElementStack.Count == 0) {
-#if NETCOREAPP
-                        return ArraySegment<ElementStackEntry>.Empty;
-#else
-                        return default;
-#endif
-                    }
-                    
-                    var orderedStack = GetElementStackInHierarchyOrder();
-                    elementStackInHierarchyOrderNoArrays = ArrayPool<ElementStackEntry>.Shared.Rent(orderedStack.Count);
-                    foreach (var item in orderedStack) {
-                        if (item.Key == null || item.IsArrayItem) {
-                            continue;
-                        }
-                        
-                        elementStackInHierarchyOrderNoArrays[elementStackInHierarchyOrderNoArraysCount++] = item;
-                    }
-                }
-                
-                return new ArraySegment<ElementStackEntry>(elementStackInHierarchyOrderNoArrays, 0, elementStackInHierarchyOrderNoArraysCount);
-            }
+            static string GetElementDisplayValue(JsonElement el) => el.ValueKind == JsonValueKind.String
+                ? el.GetString()!
+                : el.GetRawText();
 
             // Gets the name of the current property.
             string GetFullPropertyName(bool forceLocalName = false) {
@@ -831,17 +786,54 @@ namespace Jaahas.Json {
 #endif
                 }
 
-                if (options.IncludeArrayIndexesInSampleKeys || !GetElementStackInHierarchyOrder().Any(x => x.IsArrayItem)) {
+                var hierarchy = context.ElementStack.AsSpan();
+                var includeAllElements = options.IncludeArrayIndexesInSampleKeys;
+                if (!includeAllElements) {
+                    var hierarchyContainsArrayItems = false;
+                    foreach (var entry in hierarchy) {
+                        if (!entry.IsArrayItem) {
+                            continue;
+                        }
+
+                        hierarchyContainsArrayItems = true;
+                        break;
+                    }
+
+                    includeAllElements = !hierarchyContainsArrayItems;
+                }
+
+                if (includeAllElements) {
                     return string.Equals(options.PathSeparator, TimeSeriesExtractorConstants.DefaultPathSeparator, StringComparison.Ordinal)
                         ? pointer.ToString().TrimStart('/')
                         : string.Join(options.PathSeparator, pointer);
+                }
+
+                if (sb == null) {
+                    sb = new StringBuilder();
+                }
+                else {
+                    sb.Clear();
                 }
 
                 // Remove array indexes from the path. In order to do this, we construct the key
                 // from the element stack instead of using the pointer directly. This allows us
                 // to skip any elements that are array entries. This ensures that we don't
                 // accidentally omit object properties that use integer values as the property name.
-                return string.Join(options.PathSeparator, GetElementStackInHierarchyOrderNoArrays().Select(x => x.Key));
+                foreach (var item in hierarchy) {
+                    if (item.Key == null || item.IsArrayItem) {
+                        continue;
+                    }
+
+                    if (sb.Length > 0) {
+                        sb.Append(options.PathSeparator);
+                    }
+
+                    sb.Append(item.Key);
+                }
+
+                return sb.Length == 0
+                    ? string.Empty
+                    : sb.ToString();
             }
 
             // Gets the full path for the current property, not including the actual property name.
@@ -849,29 +841,63 @@ namespace Jaahas.Json {
                 if (!options.Recursive || pointer.Count <= 1) {
                     return string.Empty;
                 }
-                
-                var useDirectPointer = options.IncludeArrayIndexesInSampleKeys || !GetElementStackInHierarchyOrder().Any(x => x.IsArrayItem);
+
+                var hierarchy = context.ElementStack.AsSpan();
+
+                var useDirectPointer = options.IncludeArrayIndexesInSampleKeys;
+                if (!useDirectPointer) {
+                    var hierarchyContainsArrayItems = false;
+                    foreach (var entry in hierarchy) {
+                        if (!entry.IsArrayItem) {
+                            continue;
+                        }
+
+                        hierarchyContainsArrayItems = true;
+                        break;
+                    }
+
+                    useDirectPointer = !hierarchyContainsArrayItems;
+                }
+
                 if (useDirectPointer) {
                     var ancestor = pointer.GetAncestor(1);
                     if (string.Equals(options.PathSeparator, TimeSeriesExtractorConstants.DefaultPathSeparator, StringComparison.Ordinal)) {
                         var ancestorString = ancestor.ToString();
-                        return ancestorString.Length > 0 && ancestorString[0] == '/' 
-                            ? ancestorString.Substring(1) 
+                        return ancestorString.Length > 0 && ancestorString[0] == '/'
+                            ? ancestorString.Substring(1)
                             : ancestorString;
                     }
+
                     return string.Join(options.PathSeparator, ancestor);
                 }
 
-                var filtered = GetElementStackInHierarchyOrderNoArrays();
-                if (filtered.Count == 0) {
-                    return string.Empty;
+                if (sb == null) {
+                    sb = new StringBuilder();
                 }
-                
-#if NETCOREAPP
-                return string.Join(options.PathSeparator, filtered.SkipLast(1).Select(x => x.Key));
-#else
-                return string.Join(options.PathSeparator, filtered.Take(filtered.Count - 1).Select(x => x.Key));
-#endif
+                else {
+                    sb.Clear();
+                }
+
+                // Remove array indexes from the path. In order to do this, we construct the key
+                // from the element stack instead of using the pointer directly. This allows us
+                // to skip any elements that are array entries. This ensures that we don't
+                // accidentally omit object properties that use integer values as the property name.
+                for (var i = 0; i < hierarchy.Length - 1; i++) {
+                    var item = hierarchy[i];
+                    if (item.Key == null || item.IsArrayItem) {
+                        continue;
+                    }
+
+                    if (sb.Length > 0) {
+                        sb.Append(options.PathSeparator);
+                    }
+
+                    sb.Append(item.Key);
+                }
+
+                return sb.Length == 0
+                    ? string.Empty
+                    : sb.ToString();
             }
         }
 
