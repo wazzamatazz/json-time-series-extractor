@@ -95,14 +95,14 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.Current.TestCase.TestMethodName + "/{MacAddress}/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{MacAddress}/{$prop}",
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
             }).ToArray();
 
             Assert.Equal(13, samples.Length);
             Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
             Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
-            Assert.True(samples.All(x => x.Key.StartsWith(TestContext.Current.TestCase.TestMethodName + "/" + deviceSample.MacAddress)));
+            Assert.True(samples.All(x => x.Key.StartsWith(TestContext.Current.TestCase!.TestMethodName! + "/" + deviceSample.MacAddress)));
         }
 
 
@@ -129,7 +129,7 @@ namespace Jaahas.Json.Tests {
 
             var guid = Guid.NewGuid();
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.Current.TestCase.TestMethodName + "/{MacAddress}/{Uuid}/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{MacAddress}/{Uuid}/{$prop}",
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
                 GetTemplateReplacement = text => { 
                     switch (text.ToUpperInvariant()) {
@@ -144,7 +144,7 @@ namespace Jaahas.Json.Tests {
             Assert.Equal(13, samples.Length);
             Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
             Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
-            Assert.True(samples.All(x => x.Key.StartsWith(TestContext.Current.TestCase.TestMethodName + "/" + deviceSample.MacAddress + "/" + guid)));
+            Assert.True(samples.All(x => x.Key.StartsWith(TestContext.Current.TestCase!.TestMethodName! + "/" + deviceSample.MacAddress + "/" + guid)));
         }
 
 
@@ -166,12 +166,12 @@ namespace Jaahas.Json.Tests {
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Recursive = true,
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
-                    PointersToInclude = new JsonPointerMatch[] { "/A/B/C/Value" },
+                    PointersToInclude = ["/A/B/C/Value"],
                 }),
                 Template = "{$prop-path}/{Name}"
             }).ToArray();
 
-            Assert.Equal(1, samples.Length);
+            Assert.Single(samples);
             Assert.Equal("A/B/C/Instrument-1", samples[0].Key);
             Assert.Equal(data.A.B.C.Value, samples[0].Value);
             Assert.Equal(TimestampSource.CurrentTime, samples[0].TimestampSource);
@@ -198,13 +198,13 @@ namespace Jaahas.Json.Tests {
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Recursive = true,
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() {
-                    PointersToInclude = new JsonPointerMatch[] { "/A/B/C/0/Value" },
+                    PointersToInclude = ["/A/B/C/0/Value"],
                 }),
                 Template = "{$prop-path}/{Name}",
                 IncludeArrayIndexesInSampleKeys = false
             }).ToArray();
 
-            Assert.Equal(1, samples.Length);
+            Assert.Single(samples);
             Assert.Equal("A/B/C/Instrument-1", samples[0].Key);
             Assert.Equal(data.A.B.C[0].Value, samples[0].Value);
             Assert.Equal(TimestampSource.CurrentTime, samples[0].TimestampSource);
@@ -233,20 +233,20 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.Current.TestCase.TestMethodName + "/{MacAddress}/{DataFormat}/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{MacAddress}/{DataFormat}/{$prop}",
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
-                    PointersToExclude = new JsonPointerMatch[] {
+                    PointersToExclude = [
                         $"/{nameof(deviceSample.DataFormat)}",
                         $"/{nameof(deviceSample.MacAddress)}"
-                    }
+                    ]
                 })
             }).ToArray();
 
             Assert.Equal(11, samples.Length);
             Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
             Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
-            Assert.True(samples.All(x => x.Key.StartsWith(TestContext.Current.TestCase.TestMethodName + "/" + deviceSample.MacAddress + "/" + deviceSample.DataFormat)));
+            Assert.True(samples.All(x => x.Key.StartsWith(TestContext.Current.TestCase!.TestMethodName! + "/" + deviceSample.MacAddress + "/" + deviceSample.DataFormat)));
         }
 
 
@@ -272,21 +272,21 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.Current.TestCase.TestMethodName + "/{MacAddress}/{DataFormat}/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{MacAddress}/{DataFormat}/{$prop}",
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() {
-                    PointersToInclude = new JsonPointerMatch[] {
+                    PointersToInclude = [
                         $"/{nameof(deviceSample.Temperature)}",
                         $"/{nameof(deviceSample.Humidity)}",
                         $"/{nameof(deviceSample.Pressure)}"
-                    }
+                    ]
                 })
             }).ToArray();
 
             Assert.Equal(3, samples.Length);
             Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
             Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
-            Assert.True(samples.All(x => x.Key.StartsWith(TestContext.Current.TestCase.TestMethodName + "/" + deviceSample.MacAddress + "/" + deviceSample.DataFormat)));
+            Assert.True(samples.All(x => x.Key.StartsWith(TestContext.Current.TestCase!.TestMethodName! + "/" + deviceSample.MacAddress + "/" + deviceSample.DataFormat)));
         }
 
 
@@ -320,9 +320,9 @@ namespace Jaahas.Json.Tests {
                 TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
                     AllowWildcardExpressions = true,
-                    PointersToInclude = new JsonPointerMatch[] {
-                        $"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Acceleration)}/#",
-                    }
+                    PointersToInclude = [
+                        $"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Acceleration)}/#"
+                    ]
                 })
             }).ToArray();
 
@@ -363,13 +363,13 @@ namespace Jaahas.Json.Tests {
                 TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
                     AllowWildcardExpressions = true,
-                    PointersToInclude = new JsonPointerMatch[] {
-                        $"/+/+/X",
-                    }
+                    PointersToInclude = [
+                        $"/+/+/X"
+                    ]
                 })
             }).ToArray();
 
-            Assert.Equal(1, samples.Length);
+            Assert.Single(samples);
             var sample = samples[0];
 
             Assert.Equal(deviceSample.Data.Timestamp.UtcDateTime, sample.Timestamp.UtcDateTime);
@@ -408,13 +408,13 @@ namespace Jaahas.Json.Tests {
                 TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
                     AllowWildcardExpressions = true,
-                    PointersToInclude = new JsonPointerMatch[] {
-                        "*/X",
-                    }
+                    PointersToInclude = [
+                        "*/X"
+                    ]
                 })
             }).ToArray();
 
-            Assert.Equal(1, samples.Length);
+            Assert.Single(samples);
             var sample = samples[0];
 
             Assert.Equal(deviceSample.Data.Timestamp.UtcDateTime, sample.Timestamp.UtcDateTime);
@@ -453,9 +453,9 @@ namespace Jaahas.Json.Tests {
                 TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
                     AllowWildcardExpressions = true,
-                    PointersToInclude = new JsonPointerMatch[] {
-                        $"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Acceleration)}/?",
-                    }
+                    PointersToInclude = [
+                        $"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Acceleration)}/?"
+                    ]
                 })
             }).ToArray();
 
@@ -478,12 +478,12 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSamples);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.Current.TestCase.TestMethodName + "/sample/{$prop}"
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/sample/{$prop}"
             }).ToArray();
 
             Assert.Equal(deviceSamples.Length, samples.Length);
             Assert.True(samples.All(x => x.TimestampSource == TimestampSource.CurrentTime));
-            Assert.True(samples.All(x => string.Equals(x.Key, TestContext.Current.TestCase.TestMethodName + "/sample/Value")));
+            Assert.True(samples.All(x => string.Equals(x.Key, TestContext.Current.TestCase!.TestMethodName! + "/sample/Value")));
 
             for (var i = 0; i < deviceSamples.Length; i++) {
                 Assert.Equal(deviceSamples[i].Value, (double) samples[i].Value!);
@@ -530,7 +530,7 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.Current.TestCase.TestMethodName + "/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{$prop}",
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
                 Recursive = true
             }).ToArray();
@@ -560,7 +560,7 @@ namespace Jaahas.Json.Tests {
                 CanProcessElement = (_, prop, _) => !prop.Last().Equals("location")
             }).ToArray();
 
-            Assert.Equal(1, samples.Length);
+            Assert.Single(samples);
             Assert.Equal("System A/Subsystem 1/measurements/temperature", samples[0].Key);
             Assert.True(samples.All(x => x.TimestampSource == TimestampSource.CurrentTime));
         }
@@ -585,7 +585,7 @@ namespace Jaahas.Json.Tests {
                 CanProcessElement = (_, prop, _) => !prop.Last().Equals("location")
             }).ToArray();
 
-            Assert.Equal(1, samples.Length);
+            Assert.Single(samples);
             Assert.Equal("System A/Subsystem 1/temperature", samples[0].Key);
             Assert.True(samples.All(x => x.TimestampSource == TimestampSource.CurrentTime));
         }
@@ -637,11 +637,11 @@ namespace Jaahas.Json.Tests {
                 MaxDepth = 3,
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
                     AllowWildcardExpressions = true,
-                    PointersToInclude = new JsonPointerMatch[] { "/+/+/value" }
+                    PointersToInclude = ["/+/+/value"]
                 })
             }).ToArray();
 
-            Assert.Equal(1, samples.Length);
+            Assert.Single(samples);
             Assert.Equal("parent/child/value", samples[0].Key);
             Assert.Equal(testObject.parent.child.value, samples[0].Value);
             Assert.Equal(TimestampSource.CurrentTime, samples[0].TimestampSource);
@@ -659,11 +659,11 @@ namespace Jaahas.Json.Tests {
             var fallbackTimestamp = DateTimeOffset.Parse("1999-12-31");
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.Current.TestCase.TestMethodName + "/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{$prop}",
                 GetDefaultTimestamp = () => fallbackTimestamp
             }).ToArray();
 
-            Assert.Equal(1, samples.Length);
+            Assert.Single(samples);
             Assert.Equal(fallbackTimestamp, samples[0].Timestamp);
             Assert.Equal(TimestampSource.FallbackProvider, samples[0].TimestampSource);
         }
@@ -675,15 +675,15 @@ namespace Jaahas.Json.Tests {
                 value = 99
             };
 
-            string json = JsonSerializer.Serialize(testObject);
+            var json = JsonSerializer.Serialize(testObject);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() { 
-                Template = TestContext.Current.TestCase.TestMethodName + "/{deviceId}/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{deviceId}/{$prop}",
                 AllowUnresolvedTemplateReplacements = true
             }).ToArray();
 
-            Assert.Equal(1, samples.Length);
-            Assert.Equal(TestContext.Current.TestCase.TestMethodName + "/{deviceId}/value", samples[0].Key);
+            Assert.Single(samples);
+            Assert.Equal(TestContext.Current.TestCase!.TestMethodName! + "/{deviceId}/value", samples[0].Key);
             Assert.Equal(TimestampSource.CurrentTime, samples[0].TimestampSource);
         }
 
@@ -694,20 +694,20 @@ namespace Jaahas.Json.Tests {
                 value = 99
             };
 
-            string json = JsonSerializer.Serialize(testObject);
+            var json = JsonSerializer.Serialize(testObject);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.Current.TestCase.TestMethodName + "/{deviceId}/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{deviceId}/{$prop}",
                 AllowUnresolvedTemplateReplacements = false
             }).ToArray();
 
-            Assert.Equal(0, samples.Length);
+            Assert.Empty(samples);
         }
 
 
         [Fact]
         public void ShouldAllowNumericalTimestamp() {
-            long ms = 1646312969367;
+            var ms = 1646312969367L;
 
             var deviceSample = new {
                 Timestamp = ms,
@@ -778,7 +778,7 @@ namespace Jaahas.Json.Tests {
 
         [Fact]
         public void ShouldAllowCustomStartPosition() {
-            long ms = 1646312969367;
+            var ms = 1646312969367L;
 
             var deviceSample = new {
                 data = new {
