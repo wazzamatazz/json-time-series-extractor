@@ -4,17 +4,14 @@ using System.Text.Json;
 
 using Json.Pointer;
 
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 
 namespace Jaahas.Json.Tests {
 
-    [TestClass]
     public class JsonTimeSeriesExtractorTests {
 
-        public TestContext TestContext { get; set; } = default!;
 
-
-        [TestMethod]
+        [Fact]
         public void ShouldExtractSamplesFromJsonForAllNonTimestampFields() {
             var deviceSample = new {
                 Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
@@ -39,13 +36,13 @@ namespace Jaahas.Json.Tests {
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp))
             }).ToArray();
 
-            Assert.AreEqual(13, samples.Length);
-            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.Equal(13, samples.Length);
+            Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldUseDefaultKeyTemplate() {
             var deviceSample = new {
                 Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
@@ -70,13 +67,13 @@ namespace Jaahas.Json.Tests {
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp))
             }).ToArray();
 
-            Assert.AreEqual(13, samples.Length);
-            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.Equal(13, samples.Length);
+            Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldUseCustomKeyTemplate() {
             var deviceSample = new {
                 Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
@@ -98,18 +95,18 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.TestName + "/{MacAddress}/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{MacAddress}/{$prop}",
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
             }).ToArray();
 
-            Assert.AreEqual(13, samples.Length);
-            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
-            Assert.IsTrue(samples.All(x => x.Key.StartsWith(TestContext.TestName + "/" + deviceSample.MacAddress)));
+            Assert.Equal(13, samples.Length);
+            Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.True(samples.All(x => x.Key.StartsWith(TestContext.Current.TestCase!.TestMethodName! + "/" + deviceSample.MacAddress)));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldUseCustomKeyTemplateWithDefaultReplacements() {
             var deviceSample = new {
                 Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
@@ -132,7 +129,7 @@ namespace Jaahas.Json.Tests {
 
             var guid = Guid.NewGuid();
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.TestName + "/{MacAddress}/{Uuid}/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{MacAddress}/{Uuid}/{$prop}",
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
                 GetTemplateReplacement = text => { 
                     switch (text.ToUpperInvariant()) {
@@ -144,14 +141,14 @@ namespace Jaahas.Json.Tests {
                 }
             }).ToArray();
 
-            Assert.AreEqual(13, samples.Length);
-            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
-            Assert.IsTrue(samples.All(x => x.Key.StartsWith(TestContext.TestName + "/" + deviceSample.MacAddress + "/" + guid)));
+            Assert.Equal(13, samples.Length);
+            Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.True(samples.All(x => x.Key.StartsWith(TestContext.Current.TestCase!.TestMethodName! + "/" + deviceSample.MacAddress + "/" + guid)));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldUsePropertyPathInCustomTemplate() {
             var data = new { 
                 A = new { 
@@ -169,19 +166,19 @@ namespace Jaahas.Json.Tests {
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Recursive = true,
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
-                    PointersToInclude = new JsonPointerMatch[] { "/A/B/C/Value" },
+                    PointersToInclude = ["/A/B/C/Value"],
                 }),
                 Template = "{$prop-path}/{Name}"
             }).ToArray();
 
-            Assert.AreEqual(1, samples.Length);
-            Assert.AreEqual("A/B/C/Instrument-1", samples[0].Key);
-            Assert.AreEqual(data.A.B.C.Value, samples[0].Value);
-            Assert.AreEqual(TimestampSource.CurrentTime, samples[0].TimestampSource);
+            Assert.Single(samples);
+            Assert.Equal("A/B/C/Instrument-1", samples[0].Key);
+            Assert.Equal(data.A.B.C.Value, samples[0].Value);
+            Assert.Equal(TimestampSource.CurrentTime, samples[0].TimestampSource);
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldUsePropertyPathWithoutArrayIndexesInCustomTemplate() {
             var data = new {
                 A = new {
@@ -201,20 +198,20 @@ namespace Jaahas.Json.Tests {
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
                 Recursive = true,
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() {
-                    PointersToInclude = new JsonPointerMatch[] { "/A/B/C/0/Value" },
+                    PointersToInclude = ["/A/B/C/0/Value"],
                 }),
                 Template = "{$prop-path}/{Name}",
                 IncludeArrayIndexesInSampleKeys = false
             }).ToArray();
 
-            Assert.AreEqual(1, samples.Length);
-            Assert.AreEqual("A/B/C/Instrument-1", samples[0].Key);
-            Assert.AreEqual(data.A.B.C[0].Value, samples[0].Value);
-            Assert.AreEqual(TimestampSource.CurrentTime, samples[0].TimestampSource);
+            Assert.Single(samples);
+            Assert.Equal("A/B/C/Instrument-1", samples[0].Key);
+            Assert.Equal(data.A.B.C[0].Value, samples[0].Value);
+            Assert.Equal(TimestampSource.CurrentTime, samples[0].TimestampSource);
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldExcludeSpecifiedProperties() {
             var deviceSample = new {
                 Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
@@ -236,24 +233,24 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.TestName + "/{MacAddress}/{DataFormat}/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{MacAddress}/{DataFormat}/{$prop}",
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
-                    PointersToExclude = new JsonPointerMatch[] {
+                    PointersToExclude = [
                         $"/{nameof(deviceSample.DataFormat)}",
                         $"/{nameof(deviceSample.MacAddress)}"
-                    }
+                    ]
                 })
             }).ToArray();
 
-            Assert.AreEqual(11, samples.Length);
-            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
-            Assert.IsTrue(samples.All(x => x.Key.StartsWith(TestContext.TestName + "/" + deviceSample.MacAddress + "/" + deviceSample.DataFormat)));
+            Assert.Equal(11, samples.Length);
+            Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.True(samples.All(x => x.Key.StartsWith(TestContext.Current.TestCase!.TestMethodName! + "/" + deviceSample.MacAddress + "/" + deviceSample.DataFormat)));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldIncludeSpecifiedProperties() {
             var deviceSample = new {
                 Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
@@ -275,25 +272,25 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.TestName + "/{MacAddress}/{DataFormat}/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{MacAddress}/{DataFormat}/{$prop}",
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() {
-                    PointersToInclude = new JsonPointerMatch[] {
+                    PointersToInclude = [
                         $"/{nameof(deviceSample.Temperature)}",
                         $"/{nameof(deviceSample.Humidity)}",
                         $"/{nameof(deviceSample.Pressure)}"
-                    }
+                    ]
                 })
             }).ToArray();
 
-            Assert.AreEqual(3, samples.Length);
-            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
-            Assert.IsTrue(samples.All(x => x.Key.StartsWith(TestContext.TestName + "/" + deviceSample.MacAddress + "/" + deviceSample.DataFormat)));
+            Assert.Equal(3, samples.Length);
+            Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.True(samples.All(x => x.Key.StartsWith(TestContext.Current.TestCase!.TestMethodName! + "/" + deviceSample.MacAddress + "/" + deviceSample.DataFormat)));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldIncludePropertiesUsingMqttMultiLevelMatch() {
             var deviceSample = new { 
                 Data = new {
@@ -323,20 +320,20 @@ namespace Jaahas.Json.Tests {
                 TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
                     AllowWildcardExpressions = true,
-                    PointersToInclude = new JsonPointerMatch[] {
-                        $"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Acceleration)}/#",
-                    }
+                    PointersToInclude = [
+                        $"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Acceleration)}/#"
+                    ]
                 })
             }).ToArray();
 
-            Assert.AreEqual(3, samples.Length);
-            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Data.Timestamp.UtcDateTime)));
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
-            Assert.IsTrue(samples.All(x => x.Key.StartsWith("Data/Acceleration/")));
+            Assert.Equal(3, samples.Length);
+            Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Data.Timestamp.UtcDateTime)));
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.True(samples.All(x => x.Key.StartsWith("Data/Acceleration/")));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldIncludePropertiesUsingMqttSingleLevelMatch() {
             var deviceSample = new {
                 Data = new {
@@ -366,22 +363,22 @@ namespace Jaahas.Json.Tests {
                 TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
                     AllowWildcardExpressions = true,
-                    PointersToInclude = new JsonPointerMatch[] {
-                        $"/+/+/X",
-                    }
+                    PointersToInclude = [
+                        $"/+/+/X"
+                    ]
                 })
             }).ToArray();
 
-            Assert.AreEqual(1, samples.Length);
+            Assert.Single(samples);
             var sample = samples[0];
 
-            Assert.AreEqual(deviceSample.Data.Timestamp.UtcDateTime, sample.Timestamp.UtcDateTime);
-            Assert.AreEqual(TimestampSource.Document, sample.TimestampSource);
-            Assert.AreEqual("Data/Acceleration/X", sample.Key);
+            Assert.Equal(deviceSample.Data.Timestamp.UtcDateTime, sample.Timestamp.UtcDateTime);
+            Assert.Equal(TimestampSource.Document, sample.TimestampSource);
+            Assert.Equal("Data/Acceleration/X", sample.Key);
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldIncludePropertiesUsingMultiCharacterPatternMatch() {
             var deviceSample = new {
                 Data = new {
@@ -411,22 +408,22 @@ namespace Jaahas.Json.Tests {
                 TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
                     AllowWildcardExpressions = true,
-                    PointersToInclude = new JsonPointerMatch[] {
-                        "*/X",
-                    }
+                    PointersToInclude = [
+                        "*/X"
+                    ]
                 })
             }).ToArray();
 
-            Assert.AreEqual(1, samples.Length);
+            Assert.Single(samples);
             var sample = samples[0];
 
-            Assert.AreEqual(deviceSample.Data.Timestamp.UtcDateTime, sample.Timestamp.UtcDateTime);
-            Assert.AreEqual(TimestampSource.Document, sample.TimestampSource);
-            Assert.AreEqual("Data/Acceleration/X", sample.Key);
+            Assert.Equal(deviceSample.Data.Timestamp.UtcDateTime, sample.Timestamp.UtcDateTime);
+            Assert.Equal(TimestampSource.Document, sample.TimestampSource);
+            Assert.Equal("Data/Acceleration/X", sample.Key);
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldIncludePropertiesUsingSingleCharacterPatternMatch() {
             var deviceSample = new {
                 Data = new {
@@ -456,20 +453,20 @@ namespace Jaahas.Json.Tests {
                 TimestampProperty = JsonPointer.Parse($"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Timestamp)}"),
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
                     AllowWildcardExpressions = true,
-                    PointersToInclude = new JsonPointerMatch[] {
-                        $"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Acceleration)}/?",
-                    }
+                    PointersToInclude = [
+                        $"/{nameof(deviceSample.Data)}/{nameof(deviceSample.Data.Acceleration)}/?"
+                    ]
                 })
             }).ToArray();
 
-            Assert.AreEqual(3, samples.Length);
-            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Data.Timestamp.UtcDateTime)));
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
-            Assert.IsTrue(samples.All(x => x.Key.StartsWith("Data/Acceleration/")));
+            Assert.Equal(3, samples.Length);
+            Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Data.Timestamp.UtcDateTime)));
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.True(samples.All(x => x.Key.StartsWith("Data/Acceleration/")));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldParseTopLevelArray() {
             var deviceSamples = new[] {
                 new { Value = 55.5 },
@@ -481,20 +478,20 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSamples);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.TestName + "/sample/{$prop}"
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/sample/{$prop}"
             }).ToArray();
 
-            Assert.AreEqual(deviceSamples.Length, samples.Length);
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.CurrentTime));
-            Assert.IsTrue(samples.All(x => string.Equals(x.Key, TestContext.TestName + "/sample/Value")));
+            Assert.Equal(deviceSamples.Length, samples.Length);
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.CurrentTime));
+            Assert.True(samples.All(x => string.Equals(x.Key, TestContext.Current.TestCase!.TestMethodName! + "/sample/Value")));
 
             for (var i = 0; i < deviceSamples.Length; i++) {
-                Assert.AreEqual(deviceSamples[i].Value, (double) samples[i].Value!, $"Samples at index {i} are different.");
+                Assert.Equal(deviceSamples[i].Value, (double) samples[i].Value!);
             }
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldRecursivelyParseObject() {
             var deviceSample = new {
                 Timestamp = DateTimeOffset.Parse("2021-05-28T17:41:09.7031076+03:00"),
@@ -533,18 +530,18 @@ namespace Jaahas.Json.Tests {
             var json = JsonSerializer.Serialize(deviceSample);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.TestName + "/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{$prop}",
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp)),
                 Recursive = true
             }).ToArray();
 
-            Assert.AreEqual(16, samples.Length);
-            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.Equal(16, samples.Length);
+            Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(deviceSample.Timestamp.UtcDateTime)));
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldApplyRecursiveTemplateReplacements() {
             var testObject = new { 
                 location = "System A",
@@ -563,13 +560,13 @@ namespace Jaahas.Json.Tests {
                 CanProcessElement = (_, prop, _) => !prop.Last().Equals("location")
             }).ToArray();
 
-            Assert.AreEqual(1, samples.Length);
-            Assert.AreEqual("System A/Subsystem 1/measurements/temperature", samples[0].Key);
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.CurrentTime));
+            Assert.Single(samples);
+            Assert.Equal("System A/Subsystem 1/measurements/temperature", samples[0].Key);
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.CurrentTime));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldApplyRecursiveTemplateReplacementsWithLocalPropertyName() {
             var testObject = new {
                 location = "System A",
@@ -588,13 +585,13 @@ namespace Jaahas.Json.Tests {
                 CanProcessElement = (_, prop, _) => !prop.Last().Equals("location")
             }).ToArray();
 
-            Assert.AreEqual(1, samples.Length);
-            Assert.AreEqual("System A/Subsystem 1/temperature", samples[0].Key);
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.CurrentTime));
+            Assert.Single(samples);
+            Assert.Equal("System A/Subsystem 1/temperature", samples[0].Key);
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.CurrentTime));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldObeyRecursionDepthLimit() {
             var testObject = new {
                 location = "System A",
@@ -611,19 +608,19 @@ namespace Jaahas.Json.Tests {
                 MaxDepth = 1
             }).ToArray();
 
-            Assert.AreEqual(2, samples.Length);
+            Assert.Equal(2, samples.Length);
 
-            Assert.AreEqual("location", samples[0].Key);
-            Assert.AreEqual(testObject.location, samples[0].Value);
+            Assert.Equal("location", samples[0].Key);
+            Assert.Equal(testObject.location, samples[0].Value);
             
-            Assert.AreEqual("measurements", samples[1].Key);
-            Assert.AreEqual(@"{""location"":""Subsystem 1"",""temperature"":14}", samples[1].Value);
+            Assert.Equal("measurements", samples[1].Key);
+            Assert.Equal(@"{""location"":""Subsystem 1"",""temperature"":14}", samples[1].Value);
 
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.CurrentTime));
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.CurrentTime));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldObeyRecursionDepthLimitWhenUsingAnInclusionDelegate() {
             var testObject = new {
                 parent = new {
@@ -640,18 +637,18 @@ namespace Jaahas.Json.Tests {
                 MaxDepth = 3,
                 CanProcessElement = TimeSeriesExtractor.CreateJsonPointerMatchDelegate(new JsonPointerMatchDelegateOptions() { 
                     AllowWildcardExpressions = true,
-                    PointersToInclude = new JsonPointerMatch[] { "/+/+/value" }
+                    PointersToInclude = ["/+/+/value"]
                 })
             }).ToArray();
 
-            Assert.AreEqual(1, samples.Length);
-            Assert.AreEqual("parent/child/value", samples[0].Key);
-            Assert.AreEqual(testObject.parent.child.value, samples[0].Value);
-            Assert.AreEqual(TimestampSource.CurrentTime, samples[0].TimestampSource);
+            Assert.Single(samples);
+            Assert.Equal("parent/child/value", samples[0].Key);
+            Assert.Equal(testObject.parent.child.value, samples[0].Value);
+            Assert.Equal(TimestampSource.CurrentTime, samples[0].TimestampSource);
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldUseFallbackTimestamp() {
             var testObject = new { 
                 value = 99
@@ -662,55 +659,55 @@ namespace Jaahas.Json.Tests {
             var fallbackTimestamp = DateTimeOffset.Parse("1999-12-31");
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.TestName + "/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{$prop}",
                 GetDefaultTimestamp = () => fallbackTimestamp
             }).ToArray();
 
-            Assert.AreEqual(1, samples.Length);
-            Assert.AreEqual(fallbackTimestamp, samples[0].Timestamp);
-            Assert.AreEqual(TimestampSource.FallbackProvider, samples[0].TimestampSource);
+            Assert.Single(samples);
+            Assert.Equal(fallbackTimestamp, samples[0].Timestamp);
+            Assert.Equal(TimestampSource.FallbackProvider, samples[0].TimestampSource);
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldAllowUnresolvedTemplateReplacements() {
             var testObject = new {
                 value = 99
             };
 
-            string json = JsonSerializer.Serialize(testObject);
+            var json = JsonSerializer.Serialize(testObject);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() { 
-                Template = TestContext.TestName + "/{deviceId}/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{deviceId}/{$prop}",
                 AllowUnresolvedTemplateReplacements = true
             }).ToArray();
 
-            Assert.AreEqual(1, samples.Length);
-            Assert.AreEqual(TestContext.TestName + "/{deviceId}/value", samples[0].Key);
-            Assert.AreEqual(TimestampSource.CurrentTime, samples[0].TimestampSource);
+            Assert.Single(samples);
+            Assert.Equal(TestContext.Current.TestCase!.TestMethodName! + "/{deviceId}/value", samples[0].Key);
+            Assert.Equal(TimestampSource.CurrentTime, samples[0].TimestampSource);
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldNotAllowUnresolvedTemplateReplacements() {
             var testObject = new {
                 value = 99
             };
 
-            string json = JsonSerializer.Serialize(testObject);
+            var json = JsonSerializer.Serialize(testObject);
 
             var samples = TimeSeriesExtractor.GetSamples(json, new TimeSeriesExtractorOptions() {
-                Template = TestContext.TestName + "/{deviceId}/{$prop}",
+                Template = TestContext.Current.TestCase!.TestMethodName! + "/{deviceId}/{$prop}",
                 AllowUnresolvedTemplateReplacements = false
             }).ToArray();
 
-            Assert.AreEqual(0, samples.Length);
+            Assert.Empty(samples);
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldAllowNumericalTimestamp() {
-            long ms = 1646312969367;
+            var ms = 1646312969367L;
 
             var deviceSample = new {
                 Timestamp = ms,
@@ -735,15 +732,15 @@ namespace Jaahas.Json.Tests {
                 TimestampProperty = JsonPointer.Parse("/" + nameof(deviceSample.Timestamp))
             }).ToArray();
 
-            Assert.AreEqual(13, samples.Length);
+            Assert.Equal(13, samples.Length);
 
             var expectedTimestamp = new DateTimeOffset(1970, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMilliseconds(ms);
-            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(expectedTimestamp.UtcDateTime)));
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(expectedTimestamp.UtcDateTime)));
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldAllowCustomTimestampParsing() {
             long secs = 1686559277;
 
@@ -771,17 +768,17 @@ namespace Jaahas.Json.Tests {
                 TimestampParser = element => new DateTimeOffset(1970, 1, 1, 0, 0, 0, TimeSpan.Zero).AddSeconds(element.GetInt64())
             }).ToArray();
 
-            Assert.AreEqual(13, samples.Length);
+            Assert.Equal(13, samples.Length);
 
             var expectedTimestamp = new DateTimeOffset(1970, 1, 1, 0, 0, 0, TimeSpan.Zero).AddSeconds(secs);
-            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(expectedTimestamp.UtcDateTime)));
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(expectedTimestamp.UtcDateTime)));
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldAllowCustomStartPosition() {
-            long ms = 1646312969367;
+            var ms = 1646312969367L;
 
             var deviceSample = new {
                 data = new {
@@ -811,16 +808,16 @@ namespace Jaahas.Json.Tests {
                 Recursive = true
             }).ToArray();
 
-            Assert.AreEqual(13, samples.Length);
-            Assert.IsTrue(samples.All(x => x.Key.StartsWith("device1/")));
+            Assert.Equal(13, samples.Length);
+            Assert.True(samples.All(x => x.Key.StartsWith("device1/")));
 
             var expectedTimestamp = new DateTimeOffset(1970, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMilliseconds(ms);
-            Assert.IsTrue(samples.All(x => x.Timestamp.UtcDateTime.Equals(expectedTimestamp.UtcDateTime)));
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.True(samples.All(x => x.Timestamp.UtcDateTime.Equals(expectedTimestamp.UtcDateTime)));
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldAllowNestedTimestampsInRecursiveMode() {
             var now = DateTimeOffset.UtcNow;
 
@@ -845,16 +842,16 @@ namespace Jaahas.Json.Tests {
                 AllowNestedTimestamps = true
             }).ToArray();
 
-            Assert.AreEqual(2, samples.Length);
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
-            Assert.AreEqual(deviceSample.data[0].time, samples[0].Timestamp);
-            Assert.AreEqual(deviceSample.data[0].temperature, samples[0].Value);
-            Assert.AreEqual(deviceSample.data[1].time, samples[1].Timestamp);
-            Assert.AreEqual(deviceSample.data[1].temperature, samples[1].Value);
+            Assert.Equal(2, samples.Length);
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.Equal(deviceSample.data[0].time, samples[0].Timestamp);
+            Assert.Equal(deviceSample.data[0].temperature, samples[0].Value);
+            Assert.Equal(deviceSample.data[1].time, samples[1].Timestamp);
+            Assert.Equal(deviceSample.data[1].temperature, samples[1].Value);
         }
         
 
-        [TestMethod]
+        [Fact]
         public void ShouldNotAllowNestedTimestampsInRecursiveMode() {
             var now = DateTimeOffset.UtcNow;
 
@@ -880,18 +877,18 @@ namespace Jaahas.Json.Tests {
             }).ToArray();
 
             // 4 samples because the nested time properties are not treated as timestamps
-            Assert.AreEqual(4, samples.Length);
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
-            Assert.IsTrue(samples.All(x => x.Timestamp.Equals(deviceSample.time)));
+            Assert.Equal(4, samples.Length);
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.True(samples.All(x => x.Timestamp.Equals(deviceSample.time)));
 
-            Assert.AreEqual(JsonSerializer.Serialize(deviceSample.data[0].time).Trim('"'), samples[0].Value);
-            Assert.AreEqual(deviceSample.data[0].temperature, samples[1].Value);
-            Assert.AreEqual(JsonSerializer.Serialize(deviceSample.data[1].time).Trim('"'), samples[2].Value);
-            Assert.AreEqual(deviceSample.data[1].temperature, samples[3].Value);
+            Assert.Equal(JsonSerializer.Serialize(deviceSample.data[0].time).Trim('"'), samples[0].Value);
+            Assert.Equal(deviceSample.data[0].temperature, samples[1].Value);
+            Assert.Equal(JsonSerializer.Serialize(deviceSample.data[1].time).Trim('"'), samples[2].Value);
+            Assert.Equal(deviceSample.data[1].temperature, samples[3].Value);
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldInheritTimestampFromAncestorLevelInRecursiveMode() {
             var now = DateTimeOffset.UtcNow;
 
@@ -916,16 +913,16 @@ namespace Jaahas.Json.Tests {
                 AllowNestedTimestamps = true
             }).ToArray();
 
-            Assert.AreEqual(2, samples.Length);
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
-            Assert.AreEqual(deviceSample.data.time, samples[0].Timestamp);
-            Assert.AreEqual(deviceSample.data.time, samples[1].Timestamp);
-            Assert.AreEqual(deviceSample.data.samples[0].temperature, samples[0].Value);
-            Assert.AreEqual(deviceSample.data.samples[1].temperature, samples[1].Value);
+            Assert.Equal(2, samples.Length);
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.Equal(deviceSample.data.time, samples[0].Timestamp);
+            Assert.Equal(deviceSample.data.time, samples[1].Timestamp);
+            Assert.Equal(deviceSample.data.samples[0].temperature, samples[0].Value);
+            Assert.Equal(deviceSample.data.samples[1].temperature, samples[1].Value);
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldIncludeArrayIndexesInSampleKeys() {
             var now = DateTimeOffset.UtcNow;
 
@@ -950,20 +947,20 @@ namespace Jaahas.Json.Tests {
                 IncludeArrayIndexesInSampleKeys = true
             }).ToArray(); 
 
-            Assert.AreEqual(2, samples.Length);
+            Assert.Equal(2, samples.Length);
 
-            Assert.AreEqual("data/0/temperature", samples[0].Key);
-            Assert.AreEqual("data/1/temperature", samples[1].Key);
+            Assert.Equal("data/0/temperature", samples[0].Key);
+            Assert.Equal("data/1/temperature", samples[1].Key);
 
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
-            Assert.AreEqual(deviceSample.data[0].time, samples[0].Timestamp);
-            Assert.AreEqual(deviceSample.data[1].time, samples[1].Timestamp);
-            Assert.AreEqual(deviceSample.data[0].temperature, samples[0].Value);
-            Assert.AreEqual(deviceSample.data[1].temperature, samples[1].Value);
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.Equal(deviceSample.data[0].time, samples[0].Timestamp);
+            Assert.Equal(deviceSample.data[1].time, samples[1].Timestamp);
+            Assert.Equal(deviceSample.data[0].temperature, samples[0].Value);
+            Assert.Equal(deviceSample.data[1].temperature, samples[1].Value);
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldNotIncludeArrayIndexesInSampleKeys() {
             var now = DateTimeOffset.UtcNow;
 
@@ -988,16 +985,16 @@ namespace Jaahas.Json.Tests {
                 IncludeArrayIndexesInSampleKeys = false
             }).ToArray();
 
-            Assert.AreEqual(2, samples.Length);
+            Assert.Equal(2, samples.Length);
 
-            Assert.AreEqual("data/temperature", samples[0].Key);
-            Assert.AreEqual("data/temperature", samples[1].Key);
+            Assert.Equal("data/temperature", samples[0].Key);
+            Assert.Equal("data/temperature", samples[1].Key);
 
-            Assert.IsTrue(samples.All(x => x.TimestampSource == TimestampSource.Document));
-            Assert.AreEqual(deviceSample.data[0].time, samples[0].Timestamp);
-            Assert.AreEqual(deviceSample.data[1].time, samples[1].Timestamp);
-            Assert.AreEqual(deviceSample.data[0].temperature, samples[0].Value);
-            Assert.AreEqual(deviceSample.data[1].temperature, samples[1].Value);
+            Assert.True(samples.All(x => x.TimestampSource == TimestampSource.Document));
+            Assert.Equal(deviceSample.data[0].time, samples[0].Timestamp);
+            Assert.Equal(deviceSample.data[1].time, samples[1].Timestamp);
+            Assert.Equal(deviceSample.data[0].temperature, samples[0].Value);
+            Assert.Equal(deviceSample.data[1].temperature, samples[1].Value);
         }
 
     }

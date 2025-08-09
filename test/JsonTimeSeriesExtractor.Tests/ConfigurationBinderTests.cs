@@ -2,14 +2,13 @@
 using System.Collections.Generic;
 
 using Microsoft.Extensions.Configuration;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 
 namespace Jaahas.Json.Tests {
 
-    [TestClass]
     public class ConfigurationBinderTests {
 
-        [TestMethod]
+        [Fact]
         public void ShouldBindValidJsonPointer() {
             var builder = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?> {
@@ -21,12 +20,12 @@ namespace Jaahas.Json.Tests {
             var options = new TimeSeriesExtractorOptions();
             config.Bind("TimeSeriesExtractor", options);
 
-            Assert.IsNotNull(options.StartAt);
-            Assert.AreEqual("/foo/bar", options.StartAt.ToString());
+            Assert.NotNull(options.StartAt);
+            Assert.Equal("/foo/bar", options.StartAt.ToString());
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldNotBindInvalidJsonPointer() {
             var builder = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?> {
@@ -36,11 +35,11 @@ namespace Jaahas.Json.Tests {
             var config = builder.Build();
 
             var options = new TimeSeriesExtractorOptions();
-            Assert.ThrowsException<InvalidOperationException>(() => config.Bind("TimeSeriesExtractor", options));
+            Assert.Throws<InvalidOperationException>(() => config.Bind("TimeSeriesExtractor", options));
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldNotBindNullValue() {
             var builder = new ConfigurationBuilder();
 
@@ -49,11 +48,11 @@ namespace Jaahas.Json.Tests {
             var options = new JsonPointerMatchOptions();
             config.Bind("JsonPointerMatch", options);
 
-            Assert.IsNull(options.Match);
+            Assert.Null(options.Match);
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldNotBindEmptyValue() {
             var builder = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?> {
@@ -65,11 +64,11 @@ namespace Jaahas.Json.Tests {
             var options = new JsonPointerMatchOptions();
             config.Bind("JsonPointerMatch", options);
 
-            Assert.IsNull(options.Match);
+            Assert.Null(options.Match);
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldBindValidJsonPointerLiteralMatch() {
             var builder = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?> {
@@ -81,13 +80,13 @@ namespace Jaahas.Json.Tests {
             var options = new JsonPointerMatchOptions();
             config.Bind("JsonPointerMatch", options);
 
-            Assert.IsNotNull(options.Match);
-            Assert.AreEqual("/foo/bar", options.Match.ToString());
-            Assert.IsFalse(options.Match.Value.IsWildcardMatchRule);
+            Assert.NotNull(options.Match);
+            Assert.Equal("/foo/bar", options.Match.ToString());
+            Assert.False(options.Match.Value.IsWildcardMatchRule);
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldBindValidJsonPointerMqttMatch() {
             var builder = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?> {
@@ -99,15 +98,15 @@ namespace Jaahas.Json.Tests {
             var options = new JsonPointerMatchOptions();
             config.Bind("JsonPointerMatch", options);
 
-            Assert.IsNotNull(options.Match);
-            Assert.AreEqual("/foo/bar/+/baz/#", options.Match.ToString());
-            Assert.IsTrue(options.Match.Value.IsWildcardMatchRule);
-            Assert.IsFalse(options.Match.Value.IsPatternWildcardMatchRule);
-            Assert.IsTrue(options.Match.Value.IsMqttWildcardMatchRule);
+            Assert.NotNull(options.Match);
+            Assert.Equal("/foo/bar/+/baz/#", options.Match.ToString());
+            Assert.True(options.Match.Value.IsWildcardMatchRule);
+            Assert.False(options.Match.Value.IsPatternWildcardMatchRule);
+            Assert.True(options.Match.Value.IsMqttWildcardMatchRule);
         }
 
 
-        [TestMethod]
+        [Fact]
         public void ShouldBindValidJsonPointerPatternMatch() {
             var builder = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?> {
@@ -119,11 +118,11 @@ namespace Jaahas.Json.Tests {
             var options = new JsonPointerMatchOptions();
             config.Bind("JsonPointerMatch", options);
 
-            Assert.IsNotNull(options.Match);
-            Assert.AreEqual("*/bar", options.Match.ToString());
-            Assert.IsTrue(options.Match.Value.IsWildcardMatchRule);
-            Assert.IsTrue(options.Match.Value.IsPatternWildcardMatchRule);
-            Assert.IsFalse(options.Match.Value.IsMqttWildcardMatchRule);
+            Assert.NotNull(options.Match);
+            Assert.Equal("*/bar", options.Match.ToString());
+            Assert.True(options.Match.Value.IsWildcardMatchRule);
+            Assert.True(options.Match.Value.IsPatternWildcardMatchRule);
+            Assert.False(options.Match.Value.IsMqttWildcardMatchRule);
         }
 
 
