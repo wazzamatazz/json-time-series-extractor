@@ -9,6 +9,7 @@ This repository uses Cake Build for cross-platform build automation. Use the fol
 ### Core Development Commands
 - **Build the solution**: `./build.sh` or `./build.ps1`
 - **Run tests**: `./build.sh --target=Test` or `./build.ps1 --target=Test`
+  - Note: running tests also builds the solution.
 - **Clean and rebuild**: `./build.sh --clean` or `./build.ps1 --clean`
 - **Create NuGet packages**: `./build.sh --target=Pack` or `./build.ps1 --target=Pack`
 
@@ -49,7 +50,7 @@ This is a C# library for extracting time series data from JSON using `System.Tex
 ### Project Structure
 - **Main library**: `src/JsonTimeSeriesExtractor/` - Core extraction functionality
 - **CLI sample**: `samples/JsonTimeSeriesExtractor.Cli/` - Command-line demonstration tool
-- **Unit tests**: `test/JsonTimeSeriesExtractor.Tests/` - MSTest-based test suite
+- **Unit tests**: `test/JsonTimeSeriesExtractor.Tests/` - xUnit v3-based test suite
 - **Benchmarks**: `test/JsonTimeSeriesExtractor.Benchmarks/` - Performance testing
 
 ## Development Guidelines
@@ -66,10 +67,10 @@ This is a C# library for extracting time series data from JSON using `System.Tex
 - Do not include version numbers in `<PackageReference>` elements
 
 ### Testing Approach
-- Uses MSTest framework
+- Uses xUnit v3 framework
 - Tests should fail initially, then be made to pass
-- Test classes must include `TestContext` property
-- File system tests should use temporary directories created in `[ClassInitialize]`
+- Test projects must be executable (`<OutputType>Exe</OutputType>`)
+- File system tests should use temporary directories created in class constructors or `IClassFixture<T>`
 - Prefer adding tests to existing test projects
 
 ### Git Workflow
