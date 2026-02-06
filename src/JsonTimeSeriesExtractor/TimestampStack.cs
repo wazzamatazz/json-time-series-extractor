@@ -19,7 +19,7 @@ internal sealed class TimestampStack : IDisposable {
     /// Specifies whether the stack has been disposed.
     /// </summary>
     private bool _disposed;
-    
+
     /// <summary>
     /// The backing array.
     /// </summary>
@@ -29,18 +29,18 @@ internal sealed class TimestampStack : IDisposable {
     /// The maximum number of items that can be stored in the stack.
     /// </summary>
     private readonly int _capacity;
-    
+
     /// <summary>
     /// The current number of items in the stack.
     /// </summary>
     private int _count;
-    
+
     /// <summary>
     /// The number of items in the stack.
     /// </summary>
     public int Count => _count;
-    
-    
+
+
     /// <summary>
     /// Creates a new <see cref="TimestampStack"/> instance.
     /// </summary>
@@ -54,12 +54,12 @@ internal sealed class TimestampStack : IDisposable {
         if (capacity <= 0) {
             throw new ArgumentOutOfRangeException(nameof(capacity), Resources.Error_StackCapacityTooSmall);
         }
-        
+
         _capacity = capacity;
         _buffer = ArrayPool<ParsedTimestamp>.Shared.Rent(_capacity);
     }
 
-    
+
     /// <summary>
     /// Pushes an item onto the stack.
     /// </summary>
@@ -79,11 +79,11 @@ internal sealed class TimestampStack : IDisposable {
         if (_count >= _capacity) {
             throw new InvalidOperationException(Resources.Error_StackIsFull);
         }
-        
+
         _buffer[_count++] = entry;
     }
-    
-    
+
+
     /// <summary>
     /// Pops an item from the stack.
     /// </summary>
@@ -103,11 +103,11 @@ internal sealed class TimestampStack : IDisposable {
         if (_count == 0) {
             throw new InvalidOperationException(Resources.Error_StackIsEmpty);
         }
-        
+
         return _buffer[--_count];
     }
-    
-    
+
+
     /// <summary>
     /// Peeks at the item on the top of the stack without removing it.
     /// </summary>
@@ -127,11 +127,11 @@ internal sealed class TimestampStack : IDisposable {
         if (_count == 0) {
             throw new InvalidOperationException(Resources.Error_StackIsEmpty);
         }
-        
+
         return _buffer[_count - 1];
     }
-    
-    
+
+
     /// <summary>
     /// Gets a read-only span of the stack entries.
     /// </summary>
@@ -139,21 +139,21 @@ internal sealed class TimestampStack : IDisposable {
     ///   A read-only span of the stack entries.
     /// </returns>
     public ReadOnlySpan<ParsedTimestamp> AsSpan() => _buffer.AsSpan(0, _count);
-    
-    
+
+
     /// <inheritdoc />
     public void Dispose() {
         if (_disposed) {
             return;
         }
-        
+
         // Manually clear only the used portion to optimize performance while preventing memory leaks
         if (_count > 0) {
             Array.Clear(_buffer, 0, _count);
         }
-        
+
         ArrayPool<ParsedTimestamp>.Shared.Return(_buffer, clearArray: false);
-        
+
         _disposed = true;
     }
 

@@ -67,7 +67,7 @@ namespace Jaahas.Json {
         /// </summary>
         public bool IsMqttWildcardMatchRule => _containsSingleLevelMqttWildcardSegment || _containsMultiLevelMqttWildcardSegment;
 
-        
+
         /// <summary>
         /// Creates a new <see cref="JsonPointerMatch"/> instance.
         /// </summary>
@@ -94,24 +94,26 @@ namespace Jaahas.Json {
             _containsMultiCharacterPatternWildcard = false;
             RawValue = null;
 
-            if (Pointer != null) {
-                RawValue = Pointer.ToString();
+            if (Pointer == null) {
+                return;
+            }
 
-                for (var i = 0; i < Pointer.Count; i++) {
-                    var segment = Pointer[i];
+            RawValue = Pointer.ToString();
 
-                    if (segment.Equals(TimeSeriesExtractor.SingleLevelMqttWildcard, StringComparison.Ordinal)) {
-                        _containsSingleLevelMqttWildcardSegment = true;
-                    }
-                    else if (i == Pointer.Count - 1 && segment.Equals(TimeSeriesExtractor.MultiLevelMqttWildcard, StringComparison.Ordinal)) {
-                        _containsMultiLevelMqttWildcardSegment = true;
-                    }
-                    else if (segment.Contains(TimeSeriesExtractor.SingleCharacterWildcard)) {
-                        _containsSingleCharacterPatternWildcard = true;
-                    }
-                    else if (segment.Contains(TimeSeriesExtractor.MultiCharacterWildcard)) {
-                        _containsMultiCharacterPatternWildcard = true;
-                    }
+            for (var i = 0; i < Pointer.Value.SegmentCount; i++) {
+                var segment = Pointer.Value.GetSegment(i);
+
+                if (segment.Equals(TimeSeriesExtractor.SingleLevelMqttWildcard)) {
+                    _containsSingleLevelMqttWildcardSegment = true;
+                }
+                else if (i == Pointer.Value.SegmentCount - 1 && segment.Equals(TimeSeriesExtractor.MultiLevelMqttWildcard)) {
+                    _containsMultiLevelMqttWildcardSegment = true;
+                }
+                else if (segment.AsSpan().Contains(TimeSeriesExtractor.SingleCharacterWildcard, StringComparison.Ordinal)) {
+                    _containsSingleCharacterPatternWildcard = true;
+                }
+                else if (segment.AsSpan().Contains(TimeSeriesExtractor.MultiCharacterWildcard, StringComparison.Ordinal)) {
+                    _containsMultiCharacterPatternWildcard = true;
                 }
             }
         }
@@ -152,7 +154,7 @@ namespace Jaahas.Json {
                     _containsMultiCharacterPatternWildcard = true;
                 }
             }
-            
+
             // If we haven't been given a valid pointer, we'll throw an exception unless the
             // pointer string is a pattern expression
             if (Pointer == null && !IsPatternWildcardMatchRule) {
@@ -177,9 +179,7 @@ namespace Jaahas.Json {
         /// </returns>
         public static bool TryParse(
             string? pointer,
-#if NETCOREAPP
             [System.Diagnostics.CodeAnalysis.NotNullWhen(true)]
-#endif
             out JsonPointerMatch? result
         ) {
             if (pointer == null) {
@@ -215,7 +215,7 @@ namespace Jaahas.Json {
 
 
         /// <inheritdoc />
-        public override string ToString() => RawValue ?? Pointer!.ToString();
+        public override string ToString() => RawValue ?? Pointer!.Value.ToString();
 
 
         /// <summary>
@@ -224,7 +224,7 @@ namespace Jaahas.Json {
         /// <param name="pointer">
         ///   The JSON Pointer.
         /// </param>
-        public static implicit operator JsonPointerMatch(JsonPointer pointer) => new JsonPointerMatch(pointer ?? JsonPointer.Empty);
+        public static implicit operator JsonPointerMatch(JsonPointer pointer) => new JsonPointerMatch(pointer);
 
 
         /// <summary>
@@ -251,7 +251,7 @@ namespace Jaahas.Json {
             /// <remarks>
             ///   This field is initialized using a so-called poor man's lazy in <see cref="GetStandardValues(ITypeDescriptorContext)"/>.
             /// </remarks>
-            private static StandardValuesCollection? _standardValues;
+            private static StandardValuesCollection? s_standardValues;
 
 
             /// <inheritdoc />
@@ -262,23 +262,18 @@ namespace Jaahas.Json {
 
             /// <inheritdoc />
             public override bool CanConvertTo(ITypeDescriptorContext? context, Type? destinationType) {
-                return destinationType == typeof(string) || destinationType == typeof(JsonPointerMatch) || base.CanConvertTo(context, destinationType);
+                return destinationType == typeof(string) || destinationType == typeof(JsonPointerMatch) || destinationType != null && base.CanConvertTo(context, destinationType);
             }
 
 
             /// <inheritdoc />
-            public override object? ConvertFrom(ITypeDescriptorContext? context, CultureInfo? culture, object value) {
-                if (value is string s) {
-                    return new JsonPointerMatch(s);
-                }
-                else if (value is JsonPointer pointer) {
-                    return new JsonPointerMatch(pointer);
-                }
-                else if (value is JsonPointerMatch match) {
-                    return match;
-                }
-
-                throw GetConvertFromException(value);
+            public override object? ConvertFrom(ITypeDescriptorContext? context, CultureInfo? culture, object? value) {
+                return value switch {
+                    string s => new JsonPointerMatch(s),
+                    JsonPointer pointer => new JsonPointerMatch(pointer),
+                    JsonPointerMatch match => match,
+                    _ => throw GetConvertFromException(value)
+                };
             }
 
 
@@ -287,11 +282,9 @@ namespace Jaahas.Json {
                 if (destinationType == typeof(string)) {
                     return value?.ToString()!;
                 }
-                else if (destinationType == typeof(JsonPointerMatch)) {
-                    return value;
-                }
-
-                throw GetConvertToException(value, destinationType);
+                return destinationType == typeof(JsonPointerMatch) 
+                    ? value 
+                    : throw GetConvertToException(value, destinationType);
             }
 
 
@@ -309,7 +302,7 @@ namespace Jaahas.Json {
 
             /// <inheritdoc/>
             public override StandardValuesCollection GetStandardValues(ITypeDescriptorContext? context) {
-                return _standardValues ??= new StandardValuesCollection(new[] { JsonPointer.Empty });
+                return s_standardValues ??= new StandardValuesCollection(new[] { JsonPointer.Empty });
             }
 
 

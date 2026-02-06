@@ -557,7 +557,7 @@ namespace Jaahas.Json.Tests {
                 Template = "{location}/{$prop}",
                 PathSeparator = "/",
                 Recursive = true,
-                CanProcessElement = (_, prop, _) => !prop.Last().Equals("location")
+                CanProcessElement = (_, prop, _) => !prop[prop.SegmentCount - 1].Equals("location")
             }).ToArray();
 
             Assert.Single(samples);
@@ -582,7 +582,7 @@ namespace Jaahas.Json.Tests {
                 Template = "{location}/{$prop-local}",
                 PathSeparator = "/",
                 Recursive = true,
-                CanProcessElement = (_, prop, _) => !prop.Last().Equals("location")
+                CanProcessElement = (_, prop, _) => !prop[prop.SegmentCount - 1].Equals("location")
             }).ToArray();
 
             Assert.Single(samples);

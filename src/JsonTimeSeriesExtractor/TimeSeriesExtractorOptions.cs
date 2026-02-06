@@ -185,7 +185,7 @@ namespace Jaahas.Json {
         /// A delegate that is used to determine if a JSON element should be processed by the time 
         /// series extractor.
         /// </summary>
-        public JsonPointerMatchDelegate? CanProcessElement { get; set; } 
+        public JsonPointerMatchDelegate? CanProcessElement { get; set; }
 
         /// <summary>
         /// When <see langword="true"/>, JSON properties that contain other objects or arrays will 
