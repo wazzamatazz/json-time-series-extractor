@@ -14,12 +14,12 @@ namespace Jaahas.Json {
         /// Specifies whether the context has been disposed.
         /// </summary>
         private bool _disposed;
-        
+
         /// <summary>
         /// The extractor options.
         /// </summary>
         public TimeSeriesExtractorOptions Options { get; }
-        
+
         /// <summary>
         /// The maximum depth of the JSON document that can be processed.
         /// </summary>
@@ -39,7 +39,7 @@ namespace Jaahas.Json {
         /// Specifies whether the default sample key template is being used.
         /// </summary>
         internal bool IsDefaultSampleKeyTemplate { get; }
-        
+
         /// <summary>
         /// Specifies whether the sample key template contains any placeholders.
         /// </summary>
@@ -60,7 +60,7 @@ namespace Jaahas.Json {
                     ? TimeSeriesExtractorConstants.DefaultMaxDepth
                     : options.MaxDepth
                 : 1;
-            
+
             // We need to add 1 to the maximum depth to allow for the root element.
             ElementStack = new ElementStack(MaxDepth + 1);
             TimestampStack = new TimestampStack(options is { Recursive: true, AllowNestedTimestamps: true } ? MaxDepth : 1);
@@ -73,7 +73,7 @@ namespace Jaahas.Json {
             IsDefaultSampleKeyTemplate = Options.Recursive
                 ? string.Equals(Options.Template, TimeSeriesExtractorConstants.FullPropertyNamePlaceholder, StringComparison.Ordinal)
                 : string.Equals(Options.Template, TimeSeriesExtractorConstants.FullPropertyNamePlaceholder, StringComparison.Ordinal) || string.Equals(Options.Template, TimeSeriesExtractorConstants.LocalPropertyNamePlaceholder, StringComparison.Ordinal);
-            
+
             // We can take a shortcut if the sample key template does not contain any placeholders.
             SampleKeyTemplateContainsPlaceholders = IsDefaultSampleKeyTemplate || Options.Template.Contains("{");
         }
@@ -107,10 +107,10 @@ namespace Jaahas.Json {
             if (_disposed) {
                 return;
             }
-            
+
             ElementStack.Dispose();
             TimestampStack.Dispose();
-            
+
             _disposed = true;
         }
 

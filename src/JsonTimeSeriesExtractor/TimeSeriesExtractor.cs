@@ -18,7 +18,7 @@ namespace Jaahas.Json {
     /// <seealso cref="TimeSeriesExtractorOptions"/>
     public static partial class TimeSeriesExtractor {
 
-#if NET8_0_OR_GREATER
+#if NETCOREAPP
         /// <summary>
         /// Gets a regular expression matcher for JSON property name references in sample key templates.
         /// </summary>
@@ -145,14 +145,14 @@ namespace Jaahas.Json {
 
             foreach (var matchRule in matchRuleArray) {
                 // Ignore rules with no pointer and no raw value.
-                if (matchRule.Pointer == null && string.IsNullOrWhiteSpace(matchRule.RawValue)) {
+                if (matchRule.Pointer is null && string.IsNullOrWhiteSpace(matchRule.RawValue)) {
                     continue;
                 }
 
                 // Non-wildcard rules: collect for fast lookup.
                 if (!allowWildcards || !matchRule.IsWildcardMatchRule) {
                     // These are exact or partial pointer matches, handled together for efficiency.
-                    nonWildcardPointers.Add(matchRule.Pointer!);
+                    nonWildcardPointers.Add(matchRule.Pointer!.Value);
                     continue;
                 }
 
@@ -175,7 +175,7 @@ namespace Jaahas.Json {
                             : RegexOptions.IgnoreCase | RegexOptions.Singleline,
                         TimeSpan.FromSeconds(1));
                     wildcardPredicates.Add((context, pointer, element) => {
-                        // If the JSON element is an object or an array and we are running in recursive mode,
+                        // If the JSON element is an object or an array, and we are running in recursive mode,
                         // always return true if we have not reached our maximum recursion depth. This is required
                         // because we perform a regex match against the entire pointer string instead of doing a
                         // segment-by-segment match like we do with MQTT-style expressions so we don't want to
@@ -193,19 +193,19 @@ namespace Jaahas.Json {
                 // Multi-level wildcards are only valid in the final segment (index 0 in reversed segment list).
                 // Avoid double Reverse and ToArray allocations by using a for-loop and Span for small arrays.
                 var pointerSegments = matchRule.Pointer!;
-                var matchSegments = new (string Segment, bool IsSingleLevelWildcard, bool IsMultiLevelWildcard)[pointerSegments.Count];
-                for (var i = 0; i < pointerSegments.Count; i++) {
-                    var segment = pointerSegments[i];
+                var matchSegments = new (string Segment, bool IsSingleLevelWildcard, bool IsMultiLevelWildcard)[pointerSegments.Value.SegmentCount];
+                for (var i = 0; i < pointerSegments.Value.SegmentCount; i++) {
+                    var segment = pointerSegments.Value[i];
                     matchSegments[i] = (
-                        Segment: segment,
-                        IsSingleLevelWildcard: segment.Equals(SingleLevelMqttWildcard, StringComparison.Ordinal),
-                        IsMultiLevelWildcard: i == pointerSegments.Count - 1 && segment.Equals(MultiLevelMqttWildcard, StringComparison.Ordinal)
+                        Segment: segment.ToString(),
+                        IsSingleLevelWildcard: segment.Equals(SingleLevelMqttWildcard),
+                        IsMultiLevelWildcard: i == pointerSegments.Value.SegmentCount - 1 && segment.Equals(MultiLevelMqttWildcard)
                     );
                 }
-                
+
                 wildcardPredicates.Add((context, pointer, element) => {
                     // Special handling for when the element pointer has fewer segments than the match pointer.
-                    if (pointer.Count < matchSegments.Length) {
+                    if (pointer.SegmentCount < matchSegments.Length) {
                         // We're not running in recursive mode so definitely no match.
                         if (!context.Options.Recursive) {
                             return false;
@@ -220,40 +220,29 @@ namespace Jaahas.Json {
                             return false;
                         }
                     }
-                    var elementPointerIsLongerThanMatchPointer = pointer.Count > matchSegments.Length;
+                    var elementPointerIsLongerThanMatchPointer = pointer.SegmentCount > matchSegments.Length;
                     // The pointer has more segments than the match pattern; definitely no match unless the last match segment is a multi-level wildcard.
                     if (elementPointerIsLongerThanMatchPointer) {
-#if NETCOREAPP
                         if (!matchSegments[^1].IsMultiLevelWildcard) {
-#else
-                        if (!matchSegments[matchSegments.Length - 1].IsMultiLevelWildcard) {    
-#endif
                             return false;
                         }
                     }
                     // Only ever need to test the final segment of the element pointer, as previous segments were tested in previous iterations.
-                    var pointerSegmentIndex = pointer.Count - 1;
+                    var pointerSegmentIndex = pointer.SegmentCount - 1;
                     var matchSegment = pointerSegmentIndex >= matchSegments.Length
-#if NETCOREAPP
                         ? matchSegments[^1]
-#else
-                        ? matchSegments[matchSegments.Length - 1]                        
-#endif
                         : matchSegments[pointerSegmentIndex];
-                    
-                    // Single-level wildcard: match the current segment unless the element pointer has more segments than the match pointer and we have advanced beyond the end of the match pointer.
+
+                    // Single-level wildcard: match the current segment unless the element pointer has more segments than the match pointer, and we have advanced beyond the end of the match pointer.
                     if (matchSegment.IsSingleLevelWildcard) {
-                        if (elementPointerIsLongerThanMatchPointer && pointerSegmentIndex >= matchSegments.Length) {
-                            return false;
-                        }
-                        return true;
+                        return !elementPointerIsLongerThanMatchPointer || pointerSegmentIndex < matchSegments.Length;
                     }
-                    
+
                     // Multi-level wildcard: always match the current segment.
                     if (matchSegment.IsMultiLevelWildcard) {
                         return true;
                     }
-                    
+
                     // Not a wildcard; check if the segment values match.
                     return pointer[pointerSegmentIndex].Equals(matchSegment.Segment);
                 });
@@ -271,7 +260,8 @@ namespace Jaahas.Json {
                     if (nonWildcardPointerSet.Contains(pointer)) {
                         return true;
                     }
-                } else if (nonWildcardPointers.Count > 0) {
+                }
+                else if (nonWildcardPointers.Count > 0) {
                     // For partial matches, check each pointer in the list.
                     foreach (var p in nonWildcardPointers) {
                         if (MatchExactOrPartialJsonPointer(context, p, pointer, element)) {
@@ -310,9 +300,9 @@ namespace Jaahas.Json {
         ///   <see langword="false"/>.
         /// </returns>
         /// <remarks>
-        ///   If <paramref name="element"/> is an object or an array and we are running in 
+        ///   If <paramref name="element"/> is an object or an array, and we are running in 
         ///   recursive mode, we will also allow partial matches i.e. if the element pointer has 
-        ///   fewer segments than the match pointer, we will treat it as a match if all of the 
+        ///   fewer segments than the match pointer, we will treat it as a match if all the 
         ///   element pointer segments match their equivalent match pointer segments.
         /// </remarks>
         private static bool MatchExactOrPartialJsonPointer(TimeSeriesExtractorContext context, JsonPointer? matchPointer, JsonPointer elementPointer, JsonElement element) {
@@ -324,9 +314,9 @@ namespace Jaahas.Json {
                 return true;
             }
 
-            if (context.Options.Recursive && (element.ValueKind == JsonValueKind.Object || element.ValueKind == JsonValueKind.Array) && elementPointer.Count < matchPointer.Count) {
-                for (var i = 0; i < elementPointer.Count; i++) {
-                    if (!matchPointer[i].Equals(elementPointer[i])) {
+            if (context.Options.Recursive && element.ValueKind is JsonValueKind.Object or JsonValueKind.Array && elementPointer.SegmentCount < matchPointer.Value.SegmentCount) {
+                for (var i = 0; i < elementPointer.SegmentCount; i++) {
+                    if (!matchPointer.Value.GetSegment(i).Equals(elementPointer[i])) {
                         return false;
                     }
                 }
@@ -457,8 +447,8 @@ namespace Jaahas.Json {
 
             if (!TryGetTimestamp(element, context.Options.TimestampProperty, context.Options, out var sampleTime)) {
                 var ts = options.GetDefaultTimestamp?.Invoke();
-                defaultTimestamp = ts == null 
-                    ? new ParsedTimestamp(DateTimeOffset.UtcNow, TimestampSource.CurrentTime, null) 
+                defaultTimestamp = ts == null
+                    ? new ParsedTimestamp(DateTimeOffset.UtcNow, TimestampSource.CurrentTime, null)
                     : new ParsedTimestamp(ts.Value, TimestampSource.FallbackProvider, null);
             }
             else {
@@ -553,7 +543,7 @@ namespace Jaahas.Json {
             // push the new timestamp onto the stack for use by child elements.
             var popTimestamp = false;
             if (context.Options is { AllowNestedTimestamps: true, TimestampProperty: not null } && TryGetTimestamp(element, context.Options.TimestampProperty, context.Options, out var sampleTime)) {
-                context.TimestampStack.Push(new ParsedTimestamp(sampleTime, TimestampSource.Document, pointer.Combine(context.Options.TimestampProperty!)));
+                context.TimestampStack.Push(new ParsedTimestamp(sampleTime, TimestampSource.Document, pointer.Combine(context.Options.TimestampProperty.Value)));
                 popTimestamp = true;
             }
             // Iterate over each property in the object and process recursively.
@@ -641,7 +631,7 @@ namespace Jaahas.Json {
                 return false;
             }
 
-            var el = pointer.Evaluate(element);
+            var el = pointer.Value.Evaluate(element);
 
             if (el == null) {
                 return false;
@@ -697,7 +687,7 @@ namespace Jaahas.Json {
 
             if (context.IsDefaultSampleKeyTemplate) {
                 // Fast path for default template.
-                return GetFullPropertyName();
+                return GetFullPropertyName().ToString();
             }
 
             if (!context.SampleKeyTemplateContainsPlaceholders) {
@@ -711,7 +701,7 @@ namespace Jaahas.Json {
                     var pName = m.Groups["property"].Value;
 
                     if (string.Equals(pName, "$prop", StringComparison.Ordinal) || string.Equals(pName, "$prop-local", StringComparison.Ordinal)) {
-                        return GetFullPropertyName(string.Equals(pName, "$prop-local", StringComparison.Ordinal));
+                        return GetFullPropertyName(string.Equals(pName, "$prop-local", StringComparison.Ordinal)).ToString();
                     }
 
                     if (string.Equals(pName, "$prop-path", StringComparison.Ordinal)) {
@@ -723,7 +713,7 @@ namespace Jaahas.Json {
                         // stack (starting from the root) and concatenate them using the path separator.
 
                         var hierarchy = context.ElementStack.AsSpan();
-                        var propVals = ArrayPool<string>.Shared.Rent(hierarchy.Length); //new List<string>(hierarchy.Length);
+                        var propVals = ArrayPool<string>.Shared.Rent(hierarchy.Length);
                         var propValsIndex = 0;
 
                         try {
@@ -735,14 +725,12 @@ namespace Jaahas.Json {
                                 if (!stackEntry.Element.TryGetProperty(pName, out var prop)) {
                                     continue;
                                 }
-
-                                //propVals.Add(GetElementDisplayValue(prop));
+                                
                                 propVals[propValsIndex++] = GetElementDisplayValue(prop);
                             }
-
-                            //if (propVals.Count > 0) {
+                            
                             if (propValsIndex > 0) {
-                                return string.Join(options.PathSeparator, new ArraySegment<string?>(propVals, 0, propValsIndex));
+                                return string.Join(options.PathSeparator, (IEnumerable<string?>) new ArraySegment<string?>(propVals, 0, propValsIndex));
                             }
                         }
                         finally {
@@ -775,15 +763,11 @@ namespace Jaahas.Json {
                 : el.GetRawText();
 
             // Gets the name of the current property.
-            string GetFullPropertyName(bool forceLocalName = false) {
+            ReadOnlySpan<char> GetFullPropertyName(bool forceLocalName = false) {
                 if (!options.Recursive || forceLocalName) {
-                    return pointer.Count == 0
+                    return pointer.SegmentCount == 0
                         ? string.Empty
-#if NETCOREAPP
-                        : pointer[^1];
-#else
-                        : pointer[pointer.Count - 1];
-#endif
+                        : pointer[pointer.SegmentCount - 1].AsSpan();
                 }
 
                 var hierarchy = context.ElementStack.AsSpan();
@@ -838,7 +822,7 @@ namespace Jaahas.Json {
 
             // Gets the full path for the current property, not including the actual property name.
             string GetPropertyPath() {
-                if (!options.Recursive || pointer.Count <= 1) {
+                if (!options.Recursive || pointer.SegmentCount <= 1) {
                     return string.Empty;
                 }
 
@@ -860,15 +844,21 @@ namespace Jaahas.Json {
                 }
 
                 if (useDirectPointer) {
-                    var ancestor = pointer.GetAncestor(1);
-                    if (string.Equals(options.PathSeparator, TimeSeriesExtractorConstants.DefaultPathSeparator, StringComparison.Ordinal)) {
-                        var ancestorString = ancestor.ToString();
-                        return ancestorString.Length > 0 && ancestorString[0] == '/'
-                            ? ancestorString.Substring(1)
-                            : ancestorString;
+                    if (sb == null) {
+                        sb = new StringBuilder();
+                    }
+                    else {
+                        sb.Clear();
                     }
 
-                    return string.Join(options.PathSeparator, ancestor);
+                    for (var i = 0; i < pointer.SegmentCount - 1; i++) {
+                        if (i > 0) {
+                            sb.Append(options.PathSeparator);
+                        }
+                        sb.Append(pointer.GetSegment(i).ToString());
+                    }
+
+                    return sb.ToString();
                 }
 
                 if (sb == null) {

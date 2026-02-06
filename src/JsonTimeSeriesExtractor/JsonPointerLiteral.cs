@@ -16,12 +16,7 @@ namespace Jaahas.Json {
         /// <summary>
         /// The JSON Pointer.
         /// </summary>
-        private readonly JsonPointer _pointer;
-
-        /// <summary>
-        /// The JSON Pointer.
-        /// </summary>
-        public JsonPointer Pointer => _pointer ?? JsonPointer.Empty;
+        public JsonPointer Pointer { get; }
 
 
         /// <summary>
@@ -34,7 +29,7 @@ namespace Jaahas.Json {
         ///   <paramref name="pointer"/> is <see langword="null"/>.
         /// </exception>
         public JsonPointerLiteral(JsonPointer pointer) {
-            _pointer = pointer ?? throw new ArgumentNullException(nameof(pointer));
+            Pointer = pointer;
         }
 
 
@@ -55,7 +50,7 @@ namespace Jaahas.Json {
                 throw new ArgumentNullException(nameof(pointer));
             }
 
-            _pointer = JsonPointer.Parse(pointer);
+            Pointer = JsonPointer.Parse(pointer);
         }
 
 
@@ -75,9 +70,7 @@ namespace Jaahas.Json {
         /// </returns>
         public static bool TryParse(
             string? pointer,
-#if NETCOREAPP
             [System.Diagnostics.CodeAnalysis.NotNullWhen(true)]
-#endif
             out JsonPointerLiteral? result
         ) {
             if (pointer == null) {
@@ -124,9 +117,7 @@ namespace Jaahas.Json {
         /// <inheritdoc />
         public override bool Equals(object? obj) => obj is JsonPointerLiteral other
             ? Equals(other)
-            : obj is JsonPointer pointer
-                ? Pointer.Equals(pointer)
-                : false;
+            : obj is JsonPointer pointer && Pointer.Equals(pointer);
 
 
         /// <inheritdoc />
@@ -178,7 +169,7 @@ namespace Jaahas.Json {
         /// <param name="pointer">
         ///   The JSON Pointer.
         /// </param>
-        public static implicit operator JsonPointerLiteral(JsonPointer pointer) => pointer == null ? default : new JsonPointerLiteral(pointer);
+        public static implicit operator JsonPointerLiteral(JsonPointer pointer) => new JsonPointerLiteral(pointer);
 
 
         /// <summary>
@@ -220,18 +211,13 @@ namespace Jaahas.Json {
 
 
             /// <inheritdoc />
-            public override object? ConvertFrom(ITypeDescriptorContext? context, CultureInfo? culture, object value) {
-                if (value is string s) {
-                    return new JsonPointerLiteral(s);
-                }
-                else if (value is JsonPointer pointer) {
-                    return new JsonPointerLiteral(pointer);
-                }
-                else if (value is JsonPointerLiteral literal) {
-                    return literal;
-                }
-
-                throw GetConvertFromException(value);
+            public override object? ConvertFrom(ITypeDescriptorContext? context, CultureInfo? culture, object? value) {
+                return value switch {
+                    string s => new JsonPointerLiteral(s),
+                    JsonPointer pointer => new JsonPointerLiteral(pointer),
+                    JsonPointerLiteral literal => literal,
+                    _ => throw GetConvertFromException(value)
+                };
             }
 
 
@@ -240,10 +226,10 @@ namespace Jaahas.Json {
                 if (destinationType == typeof(string)) {
                     return value?.ToString()!;
                 }
-                else if (destinationType == typeof(JsonPointer) && value is JsonPointerLiteral pointerLiteral) {
+                if (destinationType == typeof(JsonPointer) && value is JsonPointerLiteral pointerLiteral) {
                     return pointerLiteral.Pointer;
                 }
-                else if (destinationType == typeof(JsonPointerLiteral)) {
+                if (destinationType == typeof(JsonPointerLiteral)) {
                     return value;
                 }
 
@@ -274,7 +260,7 @@ namespace Jaahas.Json {
                 if (value is string s) {
                     return TryParse(s, out _);
                 }
-                return value is JsonPointerLiteral || value is JsonPointer;
+                return value is JsonPointerLiteral or JsonPointer;
             }
 
         }
